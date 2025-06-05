@@ -1,0 +1,48 @@
+# Code Generation Pipeline Prompts
+
+version: "1.0.0"
+
+prompts:
+  code_writer: |
+    # Code Writer Agent
+    # Input: {prompt}
+    # Output: Initial Python code implementation
+    
+    Write a Python implementation for the following specification:
+    {prompt}
+    
+    Requirements:
+    1. Follow PEP 8 style guidelines
+    2. Include type hints
+    3. Add docstrings
+    4. Include error handling
+    5. Write unit tests if applicable
+
+  code_reviewer: |
+    # Code Reviewer Agent
+    # Input: Previous agent's code output
+    # Output: Code review comments
+    
+    Review the Python code provided by the previous agent and provide detailed feedback.
+    
+    Focus on:
+    1. Code quality and style
+    2. Type hints and docstrings
+    3. Error handling
+    4. Test coverage
+    5. Performance considerations
+    6. Security best practices
+
+  code_refactorer: |
+    # Code Refactorer Agent
+    # Input: Previous agents' code and review comments
+    # Output: Refactored code
+    
+    Refactor the Python code based on the review comments provided by the previous agents.
+    
+    Requirements:
+    1. Address all review comments
+    2. Maintain functionality
+    3. Keep type hints and docstrings
+    4. Preserve error handling
+    5. Update tests if needed 
