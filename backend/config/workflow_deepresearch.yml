@@ -1,0 +1,118 @@
+name: "Agentic Deep Research Workflow"
+description: "Multi-hop, agentic deep research with Google ADK MCPToolset and Gemini"
+version: "1.0.0"
+
+# API Configuration
+api_config:
+  provider: "gemini"
+  model: "gemini-1.5-flash"
+  api_key: "AIzaSyCs7T6qdSPA3r16W_q01fCzKZvn-5DAioI"
+  timeout: 60
+
+# App Configuration
+app_config:
+  app_name: "deep_research_app"
+  user_id: "user1"
+  session_id: "sess1"
+
+# MCP Configuration
+mcp_config:
+  # Default mode for MCP integration
+  default_mode: "adk_toolset"
+  
+  # RAG MCP endpoint for the deep research tool
+  rag_mcp_endpoint: "http://localhost:8000/mcp"
+  
+  # ADK Toolset Configuration
+  adk_toolset:
+    allowed_tools:
+      - "get_generative_search_response"
+      - "deep_research"
+    sse_endpoint_suffix: "/sse"
+    
+    # Agent configuration for deep research
+    agent:
+      model: "gemini-1.5-flash"
+      name: "deep_research_agent"
+      description: "Agent for deep/agentic research using both internal RAG and Google Search."
+      instruction_template: |
+        Use the 'deep_research' tool to break down and answer complex research queries from trusted sources.
+        Use the 'google_search' tool for real-time, open-domain, or recent information from the web.
+
+# Gemini LLM Configuration
+gemini_config:
+  model_name: "gemini-1.5-flash"
+  api_key: "AIzaSyCs7T6qdSPA3r16W_q01fCzKZvn-5DAioI"
+  temperature: 0.7
+  max_tokens: 1000
+  top_p: 0.95
+  top_k: 40
+  stop_sequences: []
+  timeout: 60
+  safety_settings:
+    - category: "HARM_CATEGORY_HARASSMENT"
+      threshold: "BLOCK_MEDIUM_AND_ABOVE"
+    - category: "HARM_CATEGORY_HATE_SPEECH"
+      threshold: "BLOCK_MEDIUM_AND_ABOVE"
+    - category: "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+      threshold: "BLOCK_MEDIUM_AND_ABOVE"
+    - category: "HARM_CATEGORY_DANGEROUS_CONTENT"
+      threshold: "BLOCK_MEDIUM_AND_ABOVE"
+  metadata: {}
+  backend: "google"
+
+# Deep Research Tool Configuration
+deep_research_config:
+  decomposition:
+    prompt_template: |
+      Decompose the following research query into logical sub-questions for comprehensive research. 
+      Return a plain list, one per line. Query: {query}
+  
+  synthesis:
+    prompt_template: |
+      Given the main research question: '{query}' and these findings from the RAG tool, 
+      write a synthesized, well-cited answer that covers all sub-questions. Cite all sources/links.
+  
+  # Configuration for the research process
+  process_config:
+    max_sub_questions: 10
+    enable_error_handling: true
+    enable_source_citation: true
+
+# Steps Configuration
+steps:
+  - name: "DeepResearchAgent"
+    model: "gemini-1.5-flash"
+    prompt_key: "deep_research_agentic"
+    description: "Performs multi-hop, agentic deep research via Google ADK/Gemini"
+    output_key: "deep_research_output"
+    parameters:
+      temperature: 0.5
+      max_tokens: 1200
+    tools:
+      - type: "function"
+        name: "deep_research"
+        description: "Performs agentic deep research by breaking down queries"
+      - type: "builtin"
+        name: "google_search"
+        description: "ADK's built-in Google Search tool"
+
+# Metadata
+metadata:
+  created_at: "2025-06-07"
+  author: "System"
+  environment: "development"
+  changelog:
+    - version: "1.0.0"
+      date: "2025-06-07"
+      changes:
+        - "Initial configuration for deep research workflow"
+        - "Integrated ADK toolset with Gemini and MCP"
+        - "Added comprehensive configuration abstraction"
+        - "Added environment variable support for sensitive data"
+
+# Environment Variables Documentation
+# Required:
+#   GEMINI_API_KEY - Your Google Gemini API key
+# Optional:
+#   RAG_MCP_ENDPOINT - MCP endpoint for RAG operations (default: http://localhost:8000/mcp)
