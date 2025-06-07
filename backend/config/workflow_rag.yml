@@ -1,0 +1,81 @@
+name: "RAG Workflow"
+description: "RAG workflow using Google ADK MCPToolset and direct MCP protocol calls"
+version: "2.0.0"
+api_config:
+  provider: "gemini"
+  model: "gemini-2.0-flash"
+  timeout: 60
+
+# MCP Integration Configuration
+mcp_config:
+  # Default mode: adk_toolset (recommended) or direct_protocol (fallback)
+  default_mode: "adk_toolset"
+  
+  # ADK Toolset Configuration
+  adk_toolset:
+    # Tools allowed for RAG operations - restrictive to avoid schema issues
+    allowed_tools:
+      - "get_generative_search_response"
+    
+    # SSE endpoint configuration (converted from HTTP MCP endpoint)
+    sse_endpoint_suffix: "/sse"
+    
+    # Agent configuration
+    agent:
+      model: "gemini-2.0-flash"
+      name: "rag_assistant"
+      instruction_template: |
+        You are an expert research assistant specializing in Retrieval-Augmented Generation (RAG).
+        
+        Your primary capabilities:
+        - Search and retrieve relevant documents from knowledge bases
+        - Analyze and synthesize information from multiple sources
+        - Provide accurate, well-sourced answers based on retrieved context
+        - Cite sources when possible and appropriate
+        
+        Guidelines:
+        - Only provide answers based on retrieved context
+        - Be precise and factual in your responses
+        - If information is not available in the context, clearly state this
+        - Maintain a helpful and professional tone
+        
+        IMPORTANT: When calling get_generative_search_response, only use the query parameter. 
+        Let all other parameters use their default values to avoid schema conflicts.
+  
+  # Direct Protocol Configuration (Fallback)
+  direct_protocol:
+    tool_name: "get_generative_search_response"
+    default_parameters:
+      query: ""  # Only parameter that will be used
+
+steps:
+  - name: "RAGAgent"
+    model: "gemini-2.0-flash"
+    prompt_key: "rag_retriever"
+    description: "Retrieves relevant documents and generates an answer using RAG via MCP (supports both ADK toolset and direct protocol modes)"
+    output_key: "rag_output"
+    parameters:
+      temperature: 0.7
+      max_tokens: 1000
+    tools:
+      - type: "generator"
+        provider: "gemini"
+        integration: "mcp"
+        config:
+          # Base MCP endpoint (will be converted to SSE for ADK mode)
+          mcp_endpoint: "http://localhost:8000/mcp"
+          model: "gemini-2.0-flash"
+          provider: "gemini"
+          # Only include the query parameter in the schema
+          query: ""
+
+metadata:
+  created_at: "2024-12-19"
+  author: "System"
+  environment: "development"
+  changelog:
+    - version: "2.0.0"
+      date: "2024-12-19"
+      changes:
+        - "Added support for Google ADK MCPToolset integration"
+        - "Simplified schema to use only query parameter"
