@@ -5,7 +5,7 @@ version: "1.0.0"
 # API Configuration
 api_config:
   provider: "gemini"
-  model: "gemini-1.5-flash"
+  model: "gemini-2.0-flash"
   api_key: "AIzaSyCs7T6qdSPA3r16W_q01fCzKZvn-5DAioI"
   timeout: 60
 
@@ -32,16 +32,14 @@ mcp_config:
     
     # Agent configuration for deep research
     agent:
-      model: "gemini-1.5-flash"
+      model: "gemini-2.0-flash"
       name: "deep_research_agent"
-      description: "Agent for deep/agentic research using both internal RAG and Google Search."
-      instruction_template: |
-        Use the 'deep_research' tool to break down and answer complex research queries from trusted sources.
-        Use the 'google_search' tool for real-time, open-domain, or recent information from the web.
+      description: "Agent for comprehensive research using Google Search for real-time information."
+      # Instructions loaded from prompts_deepresearch.yml
 
 # Gemini LLM Configuration
 gemini_config:
-  model_name: "gemini-1.5-flash"
+  model_name: "gemini-2.0-flash"
   api_key: "AIzaSyCs7T6qdSPA3r16W_q01fCzKZvn-5DAioI"
   temperature: 0.7
   max_tokens: 1000
@@ -63,26 +61,41 @@ gemini_config:
 
 # Deep Research Tool Configuration
 deep_research_config:
-  decomposition:
-    prompt_template: |
-      Decompose the following research query into logical sub-questions for comprehensive research. 
-      Return a plain list, one per line. Query: {query}
-  
-  synthesis:
-    prompt_template: |
-      Given the main research question: '{query}' and these findings from the RAG tool, 
-      write a synthesized, well-cited answer that covers all sub-questions. Cite all sources/links.
+  # Prompts configuration file reference
+  prompts_config_file: "backend/config/prompts_deepresearch.yml"
   
   # Configuration for the research process
   process_config:
-    max_sub_questions: 10
+    max_sub_questions: 2  # Default to 2 questions for efficiency
     enable_error_handling: true
     enable_source_citation: true
+    
+  # RAG system configuration  
+  rag_config:
+    # Primary MCP endpoint for specialized knowledge (same as main_rag.py)
+    mcp_endpoint: "http://localhost:8000/mcp"
+    # Request configuration
+    timeout_seconds: 30
+    top_k_results: 5
+    retry_attempts: 3
+    
+  # Current research configuration
+  research_config:
+    # Source attribution
+    source_label: "LLM knowledge (focus on current information)"
+    
+  # Logging configuration
+  logging_config:
+    enabled: true
+    log_directory: "data/logs"
+    log_level: "INFO"
+    include_json_export: true
+    console_output: true
 
 # Steps Configuration
 steps:
   - name: "DeepResearchAgent"
-    model: "gemini-1.5-flash"
+    model: "gemini-2.0-flash"
     prompt_key: "deep_research_agentic"
     description: "Performs multi-hop, agentic deep research via Google ADK/Gemini"
     output_key: "deep_research_output"

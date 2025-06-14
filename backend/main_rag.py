@@ -134,27 +134,27 @@ async def main() -> None:
         ) as workflow_manager:
             logger.debug("RAG workflow manager created successfully")
 
-            # Process input through RAG workflow (asynchronous)
-            logger.info("Processing input through RAG workflow")
-            result = await workflow_manager.run(input_data)
-            
-            # Log the result
-            logger.info("RAG workflow completed")
-            logger.debug(f"RAG workflow result: {result}")
-            
-            # Print the answer/output (or handle as needed)
-            if result.get('status') == WorkflowStatus.FAILED:
-                logger.error(f"Workflow failed: {result.get('error')}")
-                print(f"ERROR: {result.get('error')}")
-                sys.exit(1)
-            else:
+        # Process input through RAG workflow (asynchronous)
+        logger.info("Processing input through RAG workflow")
+        result = await workflow_manager.run(input_data)
+        
+        # Log the result
+        logger.info("RAG workflow completed")
+        logger.debug(f"RAG workflow result: {result}")
+        
+        # Print the answer/output (or handle as needed)
+        if result.get('status') == WorkflowStatus.FAILED:
+            logger.error(f"Workflow failed: {result.get('error')}")
+            print(f"ERROR: {result.get('error')}")
+            sys.exit(1)
+        else:
                 print("\n" + "="*50)
                 print("FINAL RESPONSE")
                 print("="*50)
                 print(f"Query: {result['output']['query']}")
                 print(f"Method Used: {result['output']['method']}")
                 print("-"*50)
-                print(result["output"]["response"])
+            print(result["output"]["response"])
                 print("="*50 + "\n")
 
         # Context manager will handle cleanup automatically

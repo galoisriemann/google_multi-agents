@@ -1,0 +1,159 @@
+# Deep Research Tool Prompts Configuration
+# Optimized for LLM clarity, effectiveness, and brevity
+
+decomposition:
+  main_prompt: |
+    Decompose this research query into specific, actionable sub-questions:
+
+    Query: {query}
+
+    Generate 3-7 focused sub-questions that:
+    - Cover distinct aspects of the main topic
+    - Include regulatory/legal, practical, and recent developments
+    - Are self-contained and researchable
+    - Progress from foundational to advanced concepts
+
+    Return ONLY numbered sub-questions:
+
+  fallback_prompt: |
+    Break down "{query}" into {max_questions} specific, researchable sub-questions covering key aspects.
+
+research:
+  current_research_prompt: |
+    Research this question thoroughly using current, authoritative sources:
+
+    **Question:** {question}
+
+    **Requirements:**
+    - Recent developments (last 5 years priority)
+    - Key regulations, legal frameworks, compliance requirements
+    - Best practices, expert recommendations, case studies
+    - Regional differences and uncertainties clearly noted
+    - Specific dates, numbers, and source citations
+
+    **Format:** Well-structured response with clear citations.
+
+  rag_search_prompt: |
+    Search specialized documents for authoritative information on: {query}
+    
+    Focus on official regulations, expert guidance, and established frameworks.
+
+synthesis:
+  comprehensive_synthesis: |
+    Create a comprehensive research report synthesizing these findings:
+
+    **Research Question:** {query}
+    **Sub-questions analyzed:** {num_sub_questions}
+    **Research Summary:** {findings_summary}
+
+    **Required Structure:**
+    # {query}
+
+    ## Executive Summary
+    Brief overview of key findings and conclusions.
+
+    ## Detailed Analysis
+    In-depth examination integrating specialized knowledge and current information.
+
+    ## Regulatory Framework & Requirements
+    Specific regulations, compliance needs, and legal considerations.
+
+    ## Current Developments & Trends
+    Recent changes, emerging issues, and future outlook.
+
+    ## Practical Implementation
+    Actionable insights, best practices, and real-world applications.
+
+    ## Sources & Citations
+    Complete source attribution for all claims.
+
+    **Standards:** Authoritative, well-cited, actionable insights with clear distinction between established knowledge and recent developments.
+
+  simple_synthesis: |
+    Synthesize findings for "{query}" based on {num_sub_questions} sub-questions researched.
+
+    **Key Findings:** {findings_summary}
+
+    Provide a clear, well-cited synthesis that:
+    - Directly answers the main question
+    - Integrates document knowledge with current research
+    - Highlights practical implications
+    - Cites all sources clearly
+    - Notes any conflicts or uncertainties
+
+agent_instructions:
+  deep_research_agent: |
+    You are an expert research agent with access to specialized document collections and real-time search capabilities.
+
+    **Core Mission:** Provide authoritative, well-researched answers by combining curated knowledge with current information.
+
+    **Research Process:**
+    1. **Query Analysis:** Break complex questions into researchable components
+    2. **Dual-Source Research:** Use both document collections (for authoritative knowledge) and web search (for current information)
+    3. **Critical Synthesis:** Integrate findings, noting conflicts and certainty levels
+    4. **Clear Attribution:** Cite all sources explicitly
+
+    **Quality Standards:**
+    - Accuracy and transparency above all
+    - Professional, analytical tone
+    - Explicit source attribution for every claim
+    - Clear distinction between established facts and recent developments
+    - Actionable insights when possible
+
+    **When uncertain:** Clearly state limitations and suggest refined queries.
+
+  rag_specialist_agent: |
+    You are a document retrieval specialist with access to curated, authoritative collections.
+
+    **Function:** Extract precise, relevant information from specialized document repositories.
+
+    **Standards:**
+    - Focus on official documents, regulations, and expert guidance
+    - Provide detailed context and source attribution
+    - Extract specific requirements, procedures, and compliance details
+    - Indicate document authority and publication context
+
+error_messages:
+  no_rag_response: |
+    No relevant information found in the specialized document collection. This topic may be outside the current knowledge base scope or require query refinement.
+
+  timeout_error: |
+    Research query timed out due to complexity or connectivity issues. Consider breaking into smaller, more specific sub-questions.
+
+  general_error: |
+    Research encountered an error. Proceeding with available information to provide the best possible response.
+
+config_templates:
+  logging_format: |
+    📊 Research Session: {timestamp}
+    🔍 Query: {query}
+    ⚙️  Config: {config_name} v{config_version}
+    📋 Sub-questions: {num_sub_questions}
+    📚 RAG Success: {rag_success_count}/{total_questions}
+    🌐 Search Success: {research_success_count}/{total_questions}
+
+  session_summary: |
+    Deep Research Session Complete
+    Query: {query}
+    Method: {method}
+    Sub-questions: {num_sub_questions}
+    RAG Responses: {rag_success_count} successful
+    Search Responses: {research_success_count} successful
+    Total Sources: {total_sources}
+    Duration: {duration}
+    Log File: {log_file}
+
+metadata:
+  version: "1.2.0"
+  created_date: "2025-06-07"
+  last_updated: "2025-06-07"
+  description: "Optimized prompt templates for deep research tool with full component utilization"
+  author: "System"
+  tags: ["deep_research", "prompts", "templates", "rag", "synthesis", "optimized"]
+  components_used: 
+    - "decomposition: main_prompt, fallback_prompt"
+    - "research: current_research_prompt, rag_search_prompt"
+    - "synthesis: comprehensive_synthesis, simple_synthesis"
+    - "agent_instructions: deep_research_agent, rag_specialist_agent"
+    - "error_messages: no_rag_response, timeout_error, general_error"
+    - "config_templates: logging_format, session_summary"

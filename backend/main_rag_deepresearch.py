@@ -81,7 +81,20 @@ gemini_config = workflow_config.get("gemini_config", {})
 agent_config = get_config_value(workflow_config, "mcp_config.adk_toolset.agent", {})
 AGENT_NAME = agent_config.get("name", "deep_research_agent")
 AGENT_DESCRIPTION = agent_config.get("description", "Agent for deep/agentic research")
-AGENT_INSTRUCTION = agent_config.get("instruction_template", "Use tools to perform research.")
+
+# Load prompts configuration for agent instruction
+def load_prompts_config():
+    import yaml
+    prompts_path = "backend/config/prompts_deepresearch.yml"
+    try:
+        with open(prompts_path, 'r', encoding='utf-8') as file:
+            return yaml.safe_load(file)
+    except Exception:
+        return {}
+
+prompts_config = load_prompts_config()
+AGENT_INSTRUCTION = prompts_config.get('agent_instructions', {}).get('deep_research_agent', 
+                   "Use tools to perform research.")
 
 # ---- AGENT WRAPPER ----
 
@@ -99,14 +112,15 @@ class DeepResearchAgent:
             return  # Already initialized
             
         # Create agent with tools (API key is set via environment variable)
+        # Note: Gemini 2.0 Flash supports either Google Search OR custom function tools, but not both together
         agent = Agent(
             name=AGENT_NAME,
             model=MODEL_ID,
             description=AGENT_DESCRIPTION,
             instruction=AGENT_INSTRUCTION,
             tools=[
-                deep_research_function_tool  # Custom RAG workflow tool
-                # Note: google_search removed due to Gemini 1.x limitation with multiple tools
+                # google_search,  # Disable Google Search to test deep research tool
+                deep_research_function_tool,  # Enable deep research tool that calls RAG
             ]
         )
         
@@ -143,18 +157,179 @@ class DeepResearchAgent:
             new_message=content
         )
         
-        # Process events and return the final response
+        # Process events and capture tool usage information
         final_response = None
+        tool_usage_info = []
+        search_sources = []
+        deep_research_data = None
+        
+        print("\n" + "="*80)
+        print("🔍 DEEP RESEARCH TOOL USAGE TRACKING")
+        print("="*80)
+        
         async for event in events:
+            # Check for function calls (deep research tool)
+            if hasattr(event, 'content') and event.content:
+                if hasattr(event.content, 'parts') and event.content.parts:
+                    for part in event.content.parts:
+                        if hasattr(part, 'function_call') and part.function_call:
+                            tool_name = part.function_call.name
+                            tool_info = f"🛠️  Tool Called: {tool_name}"
+                            if hasattr(part.function_call, 'args'):
+                                args = part.function_call.args
+                                tool_info += f"\n   Arguments: {args}"
+                                print(f"✅ {tool_info}")
+                            tool_usage_info.append(tool_info)
+                            
+                        elif hasattr(part, 'function_response') and part.function_response:
+                            response_name = part.function_response.name
+                            response_info = f"📝 Tool Response: {response_name}"
+                            tool_usage_info.append(response_info)
+                            print(f"✅ {response_info}")
+                            
+                            # If this is the deep research tool response, capture the data
+                            if response_name == "deep_research_tool":
+                                try:
+                                    response_content = part.function_response.response
+                                    if hasattr(response_content, 'output'):
+                                        deep_research_data = response_content.output
+                                    elif isinstance(response_content, dict):
+                                        deep_research_data = response_content
+                                    print(f"📊 Deep research data captured")
+                                except Exception as e:
+                                    print(f"⚠️ Could not parse deep research data: {e}")
+                            
+                        elif hasattr(part, 'text') and part.text:
+                            if not final_response or len(part.text) > len(final_response):
+                                final_response = part.text
+
+            # Extract grounding metadata (Google Search results) - backup method
+            if hasattr(event, 'grounding_metadata') and event.grounding_metadata:
+                if hasattr(event.grounding_metadata, 'grounding_chunks') and event.grounding_metadata.grounding_chunks:
+                    print(f"🌐 Found {len(event.grounding_metadata.grounding_chunks)} grounding chunks (Google Search results)")
+                    for chunk in event.grounding_metadata.grounding_chunks:
+                        if hasattr(chunk, 'web') and chunk.web:
+                            web_info = {
+                                'title': getattr(chunk.web, 'title', 'N/A'),
+                                'domain': getattr(chunk.web, 'domain', 'N/A'),
+                                'url': getattr(chunk.web, 'uri', 'N/A')
+                            }
+                            search_sources.append(web_info)
+                            print(f"   📄 {web_info['title']} - {web_info['domain']}")
+                    
+                    if event.grounding_metadata.grounding_chunks:
+                        tool_usage_info.append(f"🔍 Google Search: Found {len(event.grounding_metadata.grounding_chunks)} web sources")
+            
+            # Check for final response
             if hasattr(event, 'is_final_response') and event.is_final_response():
                 final_response = event.content.parts[0].text
+                print("🏁 Final response detected")
                 break
-            elif hasattr(event, 'content') and event.content:
-                # Fallback for different event types
-                if hasattr(event.content, 'parts') and event.content.parts:
-                    final_response = event.content.parts[0].text
         
-        return final_response or "No response received from agent"
+        print("="*80)
+        print(f"🛠️  Tool Usage Detected: {len(tool_usage_info)} instances")
+        print(f"🌐 Web Sources Found: {len(search_sources)} sources")
+        
+        # Create comprehensive response with all information
+        if deep_research_data:
+            # Extract detailed information from deep research
+            sub_questions = deep_research_data.get('sub_questions', [])
+            rag_results = deep_research_data.get('rag_results', [])
+            search_results = deep_research_data.get('search_results', [])
+            config_used = deep_research_data.get('config_used', {})
+            
+            # Count successful results
+            successful_rag = len([r for r in rag_results if r.get('method') != 'rag_error'])
+            successful_search = len([r for r in search_results if r.get('method') != 'search_error'])
+            
+            # Create detailed citations
+            citations_section = f"""
+🔬 **DEEP RESEARCH METHODOLOGY**
+Research Method: {config_used.get('method', 'hybrid_rag_and_search')}
+Query Decomposition: {len(sub_questions)} sub-questions generated
+RAG System Queries: {successful_rag}/{len(rag_results)} successful
+Current Research Queries: {successful_search}/{len(search_results)} successful
+Total Sources Consulted: {sum(len(r.get('sources', [])) for r in rag_results + search_results)}
+
+📋 **SUB-QUESTIONS RESEARCHED:**
+"""
+            for i, sq in enumerate(sub_questions, 1):
+                citations_section += f"{i}. {sq}\n"
+            
+            # Add RAG sources
+            if rag_results:
+                citations_section += f"\n📚 **SPECIALIZED KNOWLEDGE SOURCES (RAG System):**\n"
+                for i, result in enumerate(rag_results, 1):
+                    if result.get('method') != 'rag_error':
+                        citations_section += f"{i}. Query: {result['sub_query'][:60]}...\n"
+                        if result.get('sources'):
+                            for source in result['sources'][:2]:  # Show first 2 sources
+                                citations_section += f"   Source: {source}\n"
+                        citations_section += f"   Method: {result.get('method', 'unknown')}\n\n"
+            
+            # Add search sources  
+            if search_results:
+                citations_section += f"\n🌐 **CURRENT INFORMATION SOURCES:**\n"
+                for i, result in enumerate(search_results, 1):
+                    if result.get('method') != 'search_error':
+                        citations_section += f"{i}. Query: {result['sub_query'][:60]}...\n"
+                        if result.get('sources'):
+                            for source in result['sources']:
+                                citations_section += f"   Source: {source}\n"
+                        citations_section += f"   Method: {result.get('method', 'unknown')}\n\n"
+            
+            response_with_citations = f"""
+📊 **COMPREHENSIVE RESEARCH REPORT**
+{citations_section}
+📄 **SYNTHESIZED RESEARCH RESULTS:**
+{final_response or deep_research_data.get('synthesized_answer', 'No response received')}
+
+💡 **Note:** This research combines specialized knowledge from a curated RAG system with current information research. All sub-questions and their sources are logged in `data/logs/deep_research_[timestamp].log` for authenticity verification.
+
+🗂️ **Research Data Available:** Sub-questions, RAG responses, search responses, and synthesis process are all logged for transparency and verification.
+"""
+        
+        elif tool_usage_info or search_sources:
+            # Fallback for other tool usage
+            citations_section = ""
+            
+            if tool_usage_info:
+                citations_section += f"\n🔍 **TOOL USAGE DETAILS:**\n"
+                for info in tool_usage_info:
+                    citations_section += f"• {info}\n"
+            
+            if search_sources:
+                citations_section += f"\n📚 **WEB SOURCES CONSULTED:**\n"
+                for i, source in enumerate(search_sources, 1):
+                    citations_section += f"{i}. **{source['title']}**\n"
+                    citations_section += f"   Domain: {source['domain']}\n"
+                    if source['url'] != 'N/A':
+                        citations_section += f"   URL: {source['url']}\n"
+                    citations_section += "\n"
+                    
+            response_with_citations = f"""
+📊 **RESEARCH SUMMARY**
+Research Method: Tool-based research
+Tool Invocations: {len(tool_usage_info)} detected
+Web Sources: {len(search_sources)} consulted
+{citations_section}
+📄 **RESEARCH RESULTS:**
+{final_response or "No response received from agent"}
+
+💡 **Note:** This research was conducted using available tools. Check logs for detailed information.
+"""
+        else:
+            response_with_citations = f"""
+⚠️  **NO TOOL USAGE DETECTED**
+This response may not include specialized research data.
+
+📄 **AGENT RESPONSE:**
+{final_response or "No response received from agent"}
+
+💡 **Note:** No tool usage or specialized research detected. Response may be based on general knowledge only.
+"""
+        
+        return response_with_citations
 
     def query(self, query: str) -> str:
         """Query the agent synchronously."""
@@ -178,7 +353,7 @@ def get_workflow_config() -> dict:
 
 if __name__ == "__main__":
     # Example usage
-    query = "What are the main initiatives for private equity firms to infuse artificial intelligence into their operations?"
+    query = "Can you create me a market research report on the market for SD-IRAs in the US?"
     
     # Print configuration summary
     print(f"Configuration loaded from: {WORKFLOW_CONFIG_PATH}")
