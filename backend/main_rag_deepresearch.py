@@ -14,7 +14,7 @@ from google.adk.runners import InMemoryRunner
 from google.adk.tools import google_search  # Built-in ADK tool
 from google.genai import types
 
-from backend.tools.deep_research_tool import deep_research_function_tool
+from backend.tools.deep_research_tool import rag_tool
 
 
 # ---- CONFIG LOADING ----
@@ -79,8 +79,8 @@ gemini_config = workflow_config.get("gemini_config", {})
 
 # Extract agent configuration
 agent_config = get_config_value(workflow_config, "mcp_config.adk_toolset.agent", {})
-AGENT_NAME = agent_config.get("name", "deep_research_agent")
-AGENT_DESCRIPTION = agent_config.get("description", "Agent for deep/agentic research")
+AGENT_NAME = agent_config.get("name", "researcher_agent")
+AGENT_DESCRIPTION = agent_config.get("description", "Researcher Agent for comprehensive research")
 
 # Load prompts configuration for agent instruction
 def load_prompts_config():
@@ -93,8 +93,30 @@ def load_prompts_config():
         return {}
 
 prompts_config = load_prompts_config()
-AGENT_INSTRUCTION = prompts_config.get('agent_instructions', {}).get('deep_research_agent', 
-                   "Use tools to perform research.")
+AGENT_INSTRUCTION = prompts_config.get('agent_instructions', {}).get('researcher_agent', 
+                   prompts_config.get('agent_instructions', {}).get('deep_research_agent', 
+                   "Use tools to perform research."))
+
+# Tool configuration
+def get_enabled_tools():
+    """Get list of enabled tools based on configuration."""
+    tools = []
+    tool_config = agent_config.get("tools", {})
+    
+    # Add Google Search tool if enabled
+    if tool_config.get("google_search", {}).get("enabled", True):
+        tools.append(google_search)
+        print(f"✅ Added Google Search tool")
+    
+    # Add RAG tool if enabled  
+    if tool_config.get("rag_tool", {}).get("enabled", True):
+        tools.append(rag_tool)
+        print(f"✅ Added RAG tool")
+    
+    if not tools:
+        print("⚠️ No tools enabled - agent will have no tools")
+    
+    return tools
 
 # ---- AGENT WRAPPER ----
 
@@ -112,16 +134,23 @@ class DeepResearchAgent:
             return  # Already initialized
             
         # Create agent with tools (API key is set via environment variable)
-        # Note: Gemini 2.0 Flash supports either Google Search OR custom function tools, but not both together
+        enabled_tools = get_enabled_tools()
+        
+        print(f"\n🔧 Agent Configuration:")
+        print(f"   Name: {AGENT_NAME}")
+        print(f"   Model: {MODEL_ID}")
+        print(f"   Description: {AGENT_DESCRIPTION}")
+        print(f"   Tools: {len(enabled_tools)} enabled")
+        
+        # Try to enable grounding by using model with search capabilities
+        model_with_search = f"{MODEL_ID}"  # Base model
+        
         agent = Agent(
             name=AGENT_NAME,
-            model=MODEL_ID,
+            model=model_with_search,
             description=AGENT_DESCRIPTION,
             instruction=AGENT_INSTRUCTION,
-            tools=[
-                # google_search,  # Disable Google Search to test deep research tool
-                deep_research_function_tool,  # Enable deep research tool that calls RAG
-            ]
+            tools=enabled_tools
         )
         
         # Setup runner 
@@ -147,8 +176,39 @@ class DeepResearchAgent:
         """Query the agent asynchronously."""
         await self._init_runner()
         
-        # Create content for the query
-        content = types.Content(role='user', parts=[types.Part(text=query)])
+        # Create very direct prompt that forces immediate action
+        enhanced_prompt = f"""
+{query}
+
+Write a comprehensive markdown research report RIGHT NOW using current search data.
+
+# Market Research Report: {query.replace('Create a brief market analysis of the ', '').replace('market in the US', 'Market in the US')}
+
+## Executive Summary
+[Write actual findings with real numbers from search results]
+
+## Market Size and Growth
+[Include specific dollar amounts and growth percentages]
+
+## Key Companies
+[List real company names with their market positions]
+
+## Current Trends
+[Detail current market trends with supporting data]
+
+## Regulatory Landscape
+[Describe actual regulations and policies]
+
+## Future Outlook
+[Provide forecasts with specific timeframes]
+
+## Sources
+[Cite the search sources used]
+
+Fill each section with REAL DATA from search results. Do not write placeholders or plans.
+"""
+        
+        content = types.Content(role='user', parts=[types.Part(text=enhanced_prompt)])
         
         # Run the agent and collect events
         events = self.runner.run_async(
@@ -168,6 +228,8 @@ class DeepResearchAgent:
         print("="*80)
         
         async for event in events:
+            print(f"🔄 Processing event: {type(event).__name__}")
+            
             # Check for function calls (deep research tool)
             if hasattr(event, 'content') and event.content:
                 if hasattr(event.content, 'parts') and event.content.parts:
@@ -187,8 +249,8 @@ class DeepResearchAgent:
                             tool_usage_info.append(response_info)
                             print(f"✅ {response_info}")
                             
-                            # If this is the deep research tool response, capture the data
-                            if response_name == "deep_research_tool":
+                            # If this is the RAG tool response, capture the data
+                            if response_name in ["rag_tool", "deep_research_tool"]:
                                 try:
                                     response_content = part.function_response.response
                                     if hasattr(response_content, 'output'):
@@ -200,8 +262,9 @@ class DeepResearchAgent:
                                     print(f"⚠️ Could not parse deep research data: {e}")
                             
                         elif hasattr(part, 'text') and part.text:
-                            if not final_response or len(part.text) > len(final_response):
-                                final_response = part.text
+                            print(f"📝 Text part found: {len(part.text)} characters")
+                            print(f"    First 200 chars: {part.text[:200]}")
+                            final_response = part.text  # Always update with latest text
 
             # Extract grounding metadata (Google Search results) - backup method
             if hasattr(event, 'grounding_metadata') and event.grounding_metadata:
@@ -220,9 +283,19 @@ class DeepResearchAgent:
                     if event.grounding_metadata.grounding_chunks:
                         tool_usage_info.append(f"🔍 Google Search: Found {len(event.grounding_metadata.grounding_chunks)} web sources")
             
+            # Check for different types of responses
+            if hasattr(event, 'role') and event.role == 'model':
+                if hasattr(event, 'content') and event.content:
+                    if hasattr(event.content, 'parts') and event.content.parts:
+                        for part in event.content.parts:
+                            if hasattr(part, 'text') and part.text:
+                                print(f"🤖 Model response: {len(part.text)} characters")
+                                final_response = part.text
+            
             # Check for final response
             if hasattr(event, 'is_final_response') and event.is_final_response():
-                final_response = event.content.parts[0].text
+                if hasattr(event, 'content') and event.content and hasattr(event.content, 'parts') and event.content.parts:
+                    final_response = event.content.parts[0].text
                 print("🏁 Final response detected")
                 break
         
@@ -290,6 +363,11 @@ Total Sources Consulted: {sum(len(r.get('sources', [])) for r in rag_results + s
 """
         
         elif tool_usage_info or search_sources:
+            # If we have a good final response with search results, return it directly
+            if final_response and len(final_response) > 1000 and search_sources:
+                print(f"✅ Returning agent response directly (length: {len(final_response)} chars)")
+                return final_response
+            
             # Fallback for other tool usage
             citations_section = ""
             
@@ -308,7 +386,7 @@ Total Sources Consulted: {sum(len(r.get('sources', [])) for r in rag_results + s
                     citations_section += "\n"
                     
             response_with_citations = f"""
-📊 **RESEARCH SUMMARY**
+📊 **RESEARCH SUMMARY**  
 Research Method: Tool-based research
 Tool Invocations: {len(tool_usage_info)} detected
 Web Sources: {len(search_sources)} consulted
@@ -362,6 +440,12 @@ if __name__ == "__main__":
     print(f"Agent: {AGENT_NAME}")
     print(f"API Key configured: {'Yes' if API_KEY else 'No'}")
     print(f"GOOGLE_API_KEY env var set: {'Yes' if os.environ.get('GOOGLE_API_KEY') else 'No'}")
+    
+    # Print tool configuration
+    tool_config = agent_config.get("tools", {})
+    print(f"Tool Configuration:")
+    print(f"  Google Search: {'Enabled' if tool_config.get('google_search', {}).get('enabled', True) else 'Disabled'}")
+    print(f"  RAG Tool: {'Enabled' if tool_config.get('rag_tool', {}).get('enabled', True) else 'Disabled'}")
     print("-" * 50)
     
     try:

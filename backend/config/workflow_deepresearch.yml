@@ -33,16 +33,25 @@ mcp_config:
     # Agent configuration for deep research
     agent:
       model: "gemini-2.0-flash"
-      name: "deep_research_agent"
-      description: "Agent for comprehensive research using Google Search for real-time information."
+      name: "researcher_agent"
+      description: "Researcher Agent for comprehensive research using available tools."
       # Instructions loaded from prompts_deepresearch.yml
+      
+      # Tool configuration
+      tools:
+        google_search:
+          enabled: true
+          description: "ADK's built-in Google Search tool for current information"
+        rag_tool:
+          enabled: false
+          description: "Specialized RAG system for document-based research"
 
 # Gemini LLM Configuration
 gemini_config:
   model_name: "gemini-2.0-flash"
   api_key: "AIzaSyCs7T6qdSPA3r16W_q01fCzKZvn-5DAioI"
-  temperature: 0.7
-  max_tokens: 1000
+  temperature: 0.3
+  max_tokens: 8000
   top_p: 0.95
   top_k: 40
   stop_sequences: []

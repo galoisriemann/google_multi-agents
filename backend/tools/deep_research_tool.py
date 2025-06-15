@@ -716,16 +716,22 @@ async def deep_research(query: str) -> str:
 # Google ADK Function Tool integration
 from google.adk.tools import FunctionTool
 
-async def deep_research_function_handler(query: str) -> str:
+async def rag_tool_handler(query: str) -> str:
     """Handler function for Google ADK FunctionTool integration."""
     return await deep_research(query)
 
-# Create the Google ADK FunctionTool
-deep_research_function_tool = FunctionTool(func=deep_research_function_handler)
+# Create the Google ADK FunctionTool - renamed to rag_tool
+rag_tool = FunctionTool(func=rag_tool_handler)
+
+# Backward compatibility aliases
+deep_research_function_tool = rag_tool  # Keep old name for backwards compatibility
 
 # Tool definition for backward compatibility
-DEEP_RESEARCH_TOOL = {
-    "name": "deep_research",
+RAG_TOOL = {
+    "name": "rag_tool", 
     "description": "Performs comprehensive research by decomposing queries into sub-questions and using both specialized RAG system and current knowledge",
     "function": deep_research
 }
+
+# Backward compatibility
+DEEP_RESEARCH_TOOL = RAG_TOOL
