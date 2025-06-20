@@ -2,6 +2,8 @@ import os
 import sys
 import yaml
 import asyncio
+from datetime import datetime
+from pathlib import Path
 
 # Add project root to Python path for direct execution
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -19,9 +21,11 @@ from backend.tools.deep_research_tool import rag_tool
 
 # ---- CONFIG LOADING ----
 
-WORKFLOW_CONFIG_PATH = "backend/config/workflow_deepresearch.yml"
+# Get the directory of this script to build absolute paths
+SCRIPT_DIR = Path(__file__).parent
+WORKFLOW_CONFIG_PATH = SCRIPT_DIR / "config" / "deepresearch" / "workflow_deepresearch.yml"
 
-def load_workflow_config(path: str) -> dict:
+def load_workflow_config(path: str | Path) -> dict:
     """Load workflow configuration from YAML file."""
     with open(path, "r") as f:
         return yaml.safe_load(f)
@@ -42,10 +46,10 @@ def get_config_value(config: dict, key_path: str, default=None):
 def validate_config(config: dict):
     """Validate that required configuration values are present."""
     required_keys = [
-        "api_config.model",
+        "core_config.model",
         "app_config.app_name",
         "mcp_config.rag_mcp_endpoint",
-        "gemini_config.api_key"
+        "core_config.api_key"
     ]
     
     missing_keys = []
@@ -62,20 +66,21 @@ workflow_config = load_workflow_config(WORKFLOW_CONFIG_PATH)
 # Validate configuration
 validate_config(workflow_config)
 
-# Extract configuration values
-MODEL_ID = get_config_value(workflow_config, "api_config.model")
+# Extract configuration values - updated for new structure
+MODEL_ID = get_config_value(workflow_config, "core_config.model")
+API_KEY = get_config_value(workflow_config, "core_config.api_key")
+TEMPERATURE = get_config_value(workflow_config, "core_config.temperature", 0.3)
+MAX_TOKENS = get_config_value(workflow_config, "core_config.max_tokens", 8000)
+TIMEOUT = get_config_value(workflow_config, "core_config.timeout", 60)
+
 APP_NAME = get_config_value(workflow_config, "app_config.app_name")
 USER_ID = get_config_value(workflow_config, "app_config.user_id")
 SESSION_ID = get_config_value(workflow_config, "app_config.session_id")
 RAG_MCP_ENDPOINT = get_config_value(workflow_config, "mcp_config.rag_mcp_endpoint")
-API_KEY = get_config_value(workflow_config, "gemini_config.api_key")
 
 # Set Google API key as environment variable (ADK expects this)
 if API_KEY:
     os.environ['GOOGLE_API_KEY'] = API_KEY
-
-# Extract Gemini configuration
-gemini_config = workflow_config.get("gemini_config", {})
 
 # Extract agent configuration
 agent_config = get_config_value(workflow_config, "mcp_config.adk_toolset.agent", {})
@@ -84,18 +89,208 @@ AGENT_DESCRIPTION = agent_config.get("description", "Researcher Agent for compre
 
 # Load prompts configuration for agent instruction
 def load_prompts_config():
+    """Load prompts configuration from YAML file.
+    
+    Returns:
+        dict: Loaded prompts configuration
+        
+    Raises:
+        FileNotFoundError: If prompts file is not found
+        yaml.YAMLError: If YAML parsing fails
+    """
     import yaml
-    prompts_path = "backend/config/prompts_deepresearch.yml"
+    # Use absolute path based on script directory
+    prompts_path = SCRIPT_DIR / "prompts" / "deepresearch" / "prompts_deepresearch.yml"
     try:
         with open(prompts_path, 'r', encoding='utf-8') as file:
             return yaml.safe_load(file)
-    except Exception:
+    except FileNotFoundError:
+        print(f"⚠️ Prompts file not found at {prompts_path}")
+        return {}
+    except yaml.YAMLError as e:
+        print(f"⚠️ Error parsing prompts YAML: {e}")
         return {}
 
 prompts_config = load_prompts_config()
 AGENT_INSTRUCTION = prompts_config.get('agent_instructions', {}).get('researcher_agent', 
                    prompts_config.get('agent_instructions', {}).get('deep_research_agent', 
                    "Use tools to perform research."))
+
+def get_prompt_template(template_name: str, category: str = None) -> str:
+    """Get a specific prompt template from the loaded configuration.
+    
+    Args:
+        template_name: Name of the template to retrieve
+        category: Category under which the template is organized
+        
+    Returns:
+        str: The prompt template, or empty string if not found
+    """
+    if category:
+        return prompts_config.get(category, {}).get(template_name, "")
+    
+    # Search across all categories if no category specified
+    for cat_name, cat_data in prompts_config.items():
+        if isinstance(cat_data, dict) and template_name in cat_data:
+            return cat_data[template_name]
+    
+    return ""
+
+def build_enhanced_prompt(query: str, template_type: str = "market_research") -> str:
+    """Build an enhanced prompt using templates from configuration.
+    
+    Args:
+        query: The original research query
+        template_type: Type of template to use ("market_research" or "general_research")
+        
+    Returns:
+        str: Enhanced prompt ready for the agent
+    """
+    template_key = f"{template_type}_template"
+    template = get_prompt_template(template_key, "query_enhancement")
+    
+    if not template:
+        # Fallback to general template if specific one not found
+        template = get_prompt_template("general_research_template", "query_enhancement")
+    
+    if not template:
+        # Final fallback to basic enhancement
+        return f"{query}\n\nProvide a comprehensive research response with supporting data and sources."
+    
+    # Generate report title for market research
+    if template_type == "market_research":
+        report_title = query.replace('Create a brief market analysis of the ', '').replace('market in the US', 'Market in the US')
+        return template.format(query=query, report_title=report_title)
+    else:
+        return template.format(query=query)
+
+def build_response_with_citations(final_response: str, deep_research_data: dict = None, 
+                                tool_usage_info: list = None, search_sources: list = None,
+                                query: str = "", model_id: str = "") -> str:
+    """Build a comprehensive response with citations using templates from configuration.
+    
+    Args:
+        final_response: The main response content
+        deep_research_data: Data from deep research tool if available
+        tool_usage_info: List of tool usage information
+        search_sources: List of search sources found
+        query: Original query
+        model_id: Model identifier used
+        
+    Returns:
+        str: Formatted response with citations and methodology
+    """
+    if deep_research_data:
+        # Use deep research response template
+        template = get_prompt_template("deep_research_response_template", "response_formatting")
+        
+        # Build citations section using deep research methodology template
+        methodology_template = get_prompt_template("deep_research_methodology_template", "response_formatting")
+        
+        sub_questions = deep_research_data.get('sub_questions', [])
+        rag_results = deep_research_data.get('rag_results', [])
+        search_results = deep_research_data.get('search_results', [])
+        config_used = deep_research_data.get('config_used', {})
+        
+        successful_rag = len([r for r in rag_results if r.get('method') != 'rag_error'])
+        successful_search = len([r for r in search_results if r.get('method') != 'search_error'])
+        total_sources = sum(len(r.get('sources', [])) for r in rag_results + search_results)
+        
+        sub_questions_list = "\n".join(f"{i}. {sq}" for i, sq in enumerate(sub_questions, 1))
+        
+        if methodology_template:
+            citations_section = methodology_template.format(
+                research_method=config_used.get('method', 'hybrid_rag_and_search'),
+                sub_questions_count=len(sub_questions),
+                successful_rag=successful_rag,
+                total_rag=len(rag_results),
+                successful_search=successful_search,
+                total_search=len(search_results),
+                total_sources=total_sources,
+                sub_questions_list=sub_questions_list
+            )
+        else:
+            citations_section = f"Deep research completed with {len(sub_questions)} sub-questions"
+        
+        # Add RAG and search sources
+        if rag_results:
+            citations_section += f"\n\n📚 **SPECIALIZED KNOWLEDGE SOURCES (RAG System):**\n"
+            for i, result in enumerate(rag_results, 1):
+                if result.get('method') != 'rag_error':
+                    citations_section += f"{i}. Query: {result['sub_query'][:60]}...\n"
+                    if result.get('sources'):
+                        for source in result['sources'][:2]:
+                            citations_section += f"   Source: {source}\n"
+                    citations_section += f"   Method: {result.get('method', 'unknown')}\n\n"
+        
+        if search_results:
+            citations_section += f"\n🌐 **CURRENT INFORMATION SOURCES:**\n"
+            for i, result in enumerate(search_results, 1):
+                if result.get('method') != 'search_error':
+                    citations_section += f"{i}. Query: {result['sub_query'][:60]}...\n"
+                    if result.get('sources'):
+                        for source in result['sources']:
+                            citations_section += f"   Source: {source}\n"
+                    citations_section += f"   Method: {result.get('method', 'unknown')}\n\n"
+        
+        if template:
+            return template.format(
+                citations_section=citations_section,
+                final_response=final_response or deep_research_data.get('synthesized_answer', 'No response received')
+            )
+    
+    elif tool_usage_info or search_sources:
+        # Use tool usage response template
+        template = get_prompt_template("tool_usage_response_template", "response_formatting")
+        methodology_template = get_prompt_template("methodology_section_template", "response_formatting")
+        
+        # Build methodology section
+        if methodology_template:
+            methodology_section = methodology_template.format(
+                tool_usage_count=len(tool_usage_info),
+                sources_count=len(search_sources),
+                model_id=model_id,
+                query=query
+            )
+        else:
+            methodology_section = f"Research conducted using {len(tool_usage_info)} tools and {len(search_sources)} sources"
+        
+        # Build citations section
+        citations_section = ""
+        if tool_usage_info:
+            citations_section += f"\n🔍 **TOOL USAGE DETAILS:**\n"
+            for info in tool_usage_info:
+                citations_section += f"• {info}\n"
+        
+        if search_sources:
+            citations_section += f"\n📚 **WEB SOURCES CONSULTED:**\n"
+            for i, source in enumerate(search_sources, 1):
+                citations_section += f"{i}. **{source['title']}**\n"
+                citations_section += f"   Domain: {source['domain']}\n"
+                if source['url'] != 'N/A':
+                    citations_section += f"   URL: {source['url']}\n"
+                citations_section += "\n"
+        
+        if template:
+            return template.format(
+                methodology_section=methodology_section,
+                citations_section=citations_section,
+                final_response=final_response or "No response received from agent"
+            )
+    
+    else:
+        # Use no tools response template
+        template = get_prompt_template("no_tools_response_template", "response_formatting")
+        if template:
+            return template.format(final_response=final_response or "No response received from agent")
+    
+    # Fallback if no templates found
+    return f"""
+📊 **RESEARCH REPORT**
+{final_response or "No response received from agent"}
+
+💡 **Note:** Response generated using available research capabilities.
+"""
 
 # Tool configuration
 def get_enabled_tools():
@@ -176,37 +371,16 @@ class DeepResearchAgent:
         """Query the agent asynchronously."""
         await self._init_runner()
         
-        # Create very direct prompt that forces immediate action
-        enhanced_prompt = f"""
-{query}
-
-Write a comprehensive markdown research report RIGHT NOW using current search data.
-
-# Market Research Report: {query.replace('Create a brief market analysis of the ', '').replace('market in the US', 'Market in the US')}
-
-## Executive Summary
-[Write actual findings with real numbers from search results]
-
-## Market Size and Growth
-[Include specific dollar amounts and growth percentages]
-
-## Key Companies
-[List real company names with their market positions]
-
-## Current Trends
-[Detail current market trends with supporting data]
-
-## Regulatory Landscape
-[Describe actual regulations and policies]
-
-## Future Outlook
-[Provide forecasts with specific timeframes]
-
-## Sources
-[Cite the search sources used]
-
-Fill each section with REAL DATA from search results. Do not write placeholders or plans.
-"""
+        # Create enhanced prompt using template from configuration
+        # Auto-detect if this is a market research query
+        is_market_research = any(keyword in query.lower() for keyword in 
+                               ['market analysis', 'market research', 'market report', 'market study'])
+        
+        template_type = "market_research" if is_market_research else "general_research"
+        enhanced_prompt = build_enhanced_prompt(query, template_type)
+        
+        print(f"🔧 Using prompt template: {template_type}")
+        print(f"📝 Enhanced prompt length: {len(enhanced_prompt)} characters")
         
         content = types.Content(role='user', parts=[types.Part(text=enhanced_prompt)])
         
@@ -303,109 +477,28 @@ Fill each section with REAL DATA from search results. Do not write placeholders 
         print(f"🛠️  Tool Usage Detected: {len(tool_usage_info)} instances")
         print(f"🌐 Web Sources Found: {len(search_sources)} sources")
         
-        # Create comprehensive response with all information
-        if deep_research_data:
-            # Extract detailed information from deep research
-            sub_questions = deep_research_data.get('sub_questions', [])
-            rag_results = deep_research_data.get('rag_results', [])
-            search_results = deep_research_data.get('search_results', [])
-            config_used = deep_research_data.get('config_used', {})
-            
-            # Count successful results
-            successful_rag = len([r for r in rag_results if r.get('method') != 'rag_error'])
-            successful_search = len([r for r in search_results if r.get('method') != 'search_error'])
-            
-            # Create detailed citations
-            citations_section = f"""
-🔬 **DEEP RESEARCH METHODOLOGY**
-Research Method: {config_used.get('method', 'hybrid_rag_and_search')}
-Query Decomposition: {len(sub_questions)} sub-questions generated
-RAG System Queries: {successful_rag}/{len(rag_results)} successful
-Current Research Queries: {successful_search}/{len(search_results)} successful
-Total Sources Consulted: {sum(len(r.get('sources', [])) for r in rag_results + search_results)}
-
-📋 **SUB-QUESTIONS RESEARCHED:**
-"""
-            for i, sq in enumerate(sub_questions, 1):
-                citations_section += f"{i}. {sq}\n"
-            
-            # Add RAG sources
-            if rag_results:
-                citations_section += f"\n📚 **SPECIALIZED KNOWLEDGE SOURCES (RAG System):**\n"
-                for i, result in enumerate(rag_results, 1):
-                    if result.get('method') != 'rag_error':
-                        citations_section += f"{i}. Query: {result['sub_query'][:60]}...\n"
-                        if result.get('sources'):
-                            for source in result['sources'][:2]:  # Show first 2 sources
-                                citations_section += f"   Source: {source}\n"
-                        citations_section += f"   Method: {result.get('method', 'unknown')}\n\n"
-            
-            # Add search sources  
-            if search_results:
-                citations_section += f"\n🌐 **CURRENT INFORMATION SOURCES:**\n"
-                for i, result in enumerate(search_results, 1):
-                    if result.get('method') != 'search_error':
-                        citations_section += f"{i}. Query: {result['sub_query'][:60]}...\n"
-                        if result.get('sources'):
-                            for source in result['sources']:
-                                citations_section += f"   Source: {source}\n"
-                        citations_section += f"   Method: {result.get('method', 'unknown')}\n\n"
-            
-            response_with_citations = f"""
-📊 **COMPREHENSIVE RESEARCH REPORT**
-{citations_section}
-📄 **SYNTHESIZED RESEARCH RESULTS:**
-{final_response or deep_research_data.get('synthesized_answer', 'No response received')}
-
-💡 **Note:** This research combines specialized knowledge from a curated RAG system with current information research. All sub-questions and their sources are logged in `data/logs/deep_research_[timestamp].log` for authenticity verification.
-
-🗂️ **Research Data Available:** Sub-questions, RAG responses, search responses, and synthesis process are all logged for transparency and verification.
-"""
+        # Create comprehensive response with citations using template-based formatting
+        response_with_citations = build_response_with_citations(
+            final_response=final_response,
+            deep_research_data=deep_research_data,
+            tool_usage_info=tool_usage_info,
+            search_sources=search_sources,
+            query=query,
+            model_id=MODEL_ID
+        )
         
-        elif tool_usage_info or search_sources:
-            # If we have a good final response with search results, return it directly
-            if final_response and len(final_response) > 1000 and search_sources:
-                print(f"✅ Returning agent response directly (length: {len(final_response)} chars)")
-                return final_response
-            
-            # Fallback for other tool usage
-            citations_section = ""
-            
-            if tool_usage_info:
-                citations_section += f"\n🔍 **TOOL USAGE DETAILS:**\n"
-                for info in tool_usage_info:
-                    citations_section += f"• {info}\n"
-            
-            if search_sources:
-                citations_section += f"\n📚 **WEB SOURCES CONSULTED:**\n"
-                for i, source in enumerate(search_sources, 1):
-                    citations_section += f"{i}. **{source['title']}**\n"
-                    citations_section += f"   Domain: {source['domain']}\n"
-                    if source['url'] != 'N/A':
-                        citations_section += f"   URL: {source['url']}\n"
-                    citations_section += "\n"
-                    
-            response_with_citations = f"""
-📊 **RESEARCH SUMMARY**  
-Research Method: Tool-based research
-Tool Invocations: {len(tool_usage_info)} detected
-Web Sources: {len(search_sources)} consulted
-{citations_section}
-📄 **RESEARCH RESULTS:**
-{final_response or "No response received from agent"}
-
-💡 **Note:** This research was conducted using available tools. Check logs for detailed information.
-"""
+        # Save response as markdown file if configured
+        output_config = get_config_value(workflow_config, "deep_research_config.output_config", {})
+        if output_config.get("auto_save_markdown", True):
+            try:
+                markdown_file_path = save_response_as_markdown(response_with_citations, query)
+                print(f"📄 Research report saved to: {markdown_file_path}")
+                # Add file path info to response
+                response_with_citations += f"\n\n📁 **Report saved to:** `{markdown_file_path}`"
+            except Exception as e:
+                print(f"⚠️ Could not save markdown file: {e}")
         else:
-            response_with_citations = f"""
-⚠️  **NO TOOL USAGE DETECTED**
-This response may not include specialized research data.
-
-📄 **AGENT RESPONSE:**
-{final_response or "No response received from agent"}
-
-💡 **Note:** No tool usage or specialized research detected. Response may be based on general knowledge only.
-"""
+            print("📄 Auto-save disabled in configuration")
         
         return response_with_citations
 
@@ -429,9 +522,65 @@ def get_workflow_config() -> dict:
     """Get the loaded workflow configuration."""
     return workflow_config
 
+def save_response_as_markdown(response: str, query: str, output_dir: str = None) -> str:
+    """Save the agent response as a markdown file.
+    
+    Args:
+        response: The formatted response text to save
+        query: The original query for filename generation
+        output_dir: Directory to save the markdown file (uses config if None)
+        
+    Returns:
+        Path to the saved markdown file
+    """
+    # Use configured output directory if not specified
+    if output_dir is None:
+        output_config = get_config_value(workflow_config, "deep_research_config.output_config", {})
+        output_dir = output_config.get("reports_directory", "output/reports")
+    
+    # Create absolute path for output directory based on script location
+    if not Path(output_dir).is_absolute():
+        output_path = SCRIPT_DIR / output_dir
+    else:
+        output_path = Path(output_dir)
+    
+    # Create output directory if it doesn't exist
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Generate filename from query and timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Clean query for filename (remove special characters)
+    clean_query = "".join(c for c in query if c.isalnum() or c in (' ', '-', '_')).strip()
+    clean_query = clean_query.replace(' ', '_')[:50]  # Limit length
+    
+    filename = f"research_report_{clean_query}_{timestamp}.md"
+    filepath = output_path / filename
+    
+    # Add header to markdown
+    markdown_content = f"""# Research Report: {query}
+
+**Generated:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}  
+**Method:** Deep Research Agent with Dynamic Tool Configuration
+
+---
+
+{response}
+
+---
+
+*This report was generated automatically by the Researcher Agent using configured tools including Google Search and RAG systems.*
+"""
+    
+    # Write to file
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(markdown_content)
+    
+    return str(filepath)
+
 if __name__ == "__main__":
     # Example usage
-    query = "Can you create me a market research report on the market for SD-IRAs in the US?"
+    query = "a detailed report on AI for private equity"
     
     # Print configuration summary
     print(f"Configuration loaded from: {WORKFLOW_CONFIG_PATH}")

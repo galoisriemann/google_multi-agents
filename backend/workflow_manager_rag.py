@@ -304,9 +304,9 @@ class WorkflowPaths:
         self.prompts_dir = self.base_dir / "prompts"
         self.input_dir = self.base_dir / "input"
         self.output_dir = self.base_dir / "output"
-        self.workflow_config = self.config_dir / "workflow_rag.yml"
-        self.prompts_config = self.prompts_dir / "prompts_rag.yml"
-        self.gemini_config = self.config_dir / "gemini_config_rag.yml"
+        self.workflow_config = self.config_dir / "rag" / "workflow_rag.yml"
+        self.prompts_config = self.prompts_dir / "rag" / "prompts_rag.yml"
+        self.gemini_config = self.config_dir / "rag" / "gemini_config_rag.yml"
 
     def ensure_directories(self) -> None:
         for dir_path in [self.config_dir, self.prompts_dir, self.input_dir, self.output_dir]:

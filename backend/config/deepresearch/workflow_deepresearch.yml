@@ -1,0 +1,88 @@
+name: "Agentic Deep Research Workflow"
+description: "Multi-hop, agentic deep research with Google ADK"
+version: "1.0.0"
+
+# Core Configuration
+core_config:
+  model: "gemini-2.0-flash"
+  api_key: "AIzaSyCs7T6qdSPA3r16W_q01fCzKZvn-5DAioI"
+  temperature: 0.3
+  max_tokens: 8000
+  timeout: 60
+
+# App Configuration
+app_config:
+  app_name: "deep_research_app"
+  user_id: "user1"
+  session_id: "sess1"
+
+# MCP Configuration
+mcp_config:
+  # Default mode for MCP integration
+  default_mode: "adk_toolset"
+  
+  # RAG MCP endpoint for the deep research tool
+  rag_mcp_endpoint: "http://localhost:8000/mcp"
+  
+  # ADK Toolset Configuration
+  adk_toolset:
+    allowed_tools:
+      - "get_generative_search_response"
+      - "deep_research"
+    sse_endpoint_suffix: "/sse"
+    
+    # Agent configuration for deep research
+    agent:
+      name: "researcher_agent"
+      description: "Researcher Agent for comprehensive research using available tools."
+      
+      # Tool configuration
+      tools:
+        google_search:
+          enabled: true
+          description: "ADK's built-in Google Search tool for current information"
+        rag_tool:
+          enabled: false
+          description: "Specialized RAG system for document-based research"
+
+# Deep Research Tool Configuration
+deep_research_config:
+  # Prompts configuration file reference
+  prompts_config_file: "backend/prompts/deepresearch/prompts_deepresearch.yml"
+  
+  # Configuration for the research process
+  process_config:
+    max_sub_questions: 2  # Default to 2 questions for efficiency
+    enable_error_handling: true
+    enable_source_citation: true
+    
+  # RAG system configuration  
+  rag_config:
+    # Primary MCP endpoint for specialized knowledge
+    mcp_endpoint: "http://localhost:8000/mcp"
+    # Request configuration
+    timeout_seconds: 30
+    top_k_results: 5
+    retry_attempts: 3
+    
+  # Current research configuration
+  research_config:
+    # Source attribution
+    source_label: "LLM knowledge (focus on current information)"
+    
+  # Output configuration
+  output_config:
+    # Directory for saving markdown reports
+    reports_directory: "output/reports"
+    # Auto-save final reports as markdown
+    auto_save_markdown: true
+    # Include timestamp in filenames
+    include_timestamp: true
+    
+  # Logging configuration
+  logging_config:
+    enabled: true
+    log_directory: "data/logs"
+    log_level: "INFO"
+    include_json_export: true
+    console_output: true

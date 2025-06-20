@@ -32,7 +32,7 @@ def load_config() -> Dict:
         FileNotFoundError: If configuration file is not found.
         yaml.YAMLError: If YAML parsing fails.
     """
-    config_path = Path("backend/config/workflow_deepresearch.yml")
+    config_path = Path("backend/config/deepresearch/workflow_deepresearch.yml")
     try:
         with open(config_path, 'r', encoding='utf-8') as file:
             config = yaml.safe_load(file)
@@ -57,7 +57,7 @@ def load_prompts_config(config: Dict) -> Dict:
         yaml.YAMLError: If YAML parsing fails.
     """
     deep_research_config = config.get('deep_research_config', {})
-    prompts_file = deep_research_config.get('prompts_config_file', 'backend/config/prompts_deepresearch.yml')
+    prompts_file = deep_research_config.get('prompts_config_file', 'backend/prompts/deepresearch/prompts_deepresearch.yml')
     prompts_path = Path(prompts_file)
     
     try:

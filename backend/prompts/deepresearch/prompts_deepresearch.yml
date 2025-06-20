@@ -115,6 +115,52 @@ agent_instructions:
 
     **CRITICAL:** Your response must be a complete, fully-populated research report with real data from your Google Search results. No outlines or plans allowed.
 
+query_enhancement:
+  market_research_template: |
+    {query}
+
+    Write a comprehensive markdown research report RIGHT NOW using current search data.
+
+    # Market Research Report: {report_title}
+
+    ## Executive Summary
+    [Write actual findings with real numbers from search results]
+
+    ## Market Size and Growth
+    [Include specific dollar amounts and growth percentages]
+
+    ## Key Companies
+    [List real company names with their market positions]
+
+    ## Current Trends
+    [Detail current market trends with supporting data]
+
+    ## Regulatory Landscape
+    [Describe actual regulations and policies]
+
+    ## Future Outlook
+    [Provide forecasts with specific timeframes]
+
+    ## Sources
+    [Cite the search sources used]
+
+    Fill each section with REAL DATA from search results. Do not write placeholders or plans.
+
+  general_research_template: |
+    {query}
+
+    Conduct thorough research and provide a comprehensive response using current data sources.
+
+    **Research Requirements:**
+    - Use authoritative, up-to-date sources
+    - Include specific facts, figures, and examples
+    - Provide proper citations and references
+    - Structure information logically and clearly
+    - Address all aspects of the query completely
+
+    **Output Format:**
+    Provide a well-structured, informative response that directly addresses the query with supporting evidence from your research.
+
   # Backward compatibility - keep old name
   deep_research_agent: |
     You are an expert research agent with access to specialized document collections and real-time search capabilities.
@@ -146,6 +192,64 @@ agent_instructions:
     - Provide detailed context and source attribution
     - Extract specific requirements, procedures, and compliance details
     - Indicate document authority and publication context
+
+response_formatting:
+  deep_research_response_template: |
+    📊 **COMPREHENSIVE RESEARCH REPORT**
+    {citations_section}
+    📄 **SYNTHESIZED RESEARCH RESULTS:**
+    {final_response}
+
+    💡 **Note:** This research combines specialized knowledge from a curated RAG system with current information research. All sub-questions and their sources are logged in `data/logs/deep_research_[timestamp].log` for authenticity verification.
+
+    🗂️ **Research Data Available:** Sub-questions, RAG responses, search responses, and synthesis process are all logged for transparency and verification.
+
+  tool_usage_response_template: |
+    📊 **COMPREHENSIVE RESEARCH REPORT**
+    {methodology_section}
+    {citations_section}
+
+    📄 **SYNTHESIZED RESEARCH RESULTS:**
+    {final_response}
+
+    💡 **Note:** This research was conducted using Google ADK's built-in search capabilities. All sources were automatically discovered and incorporated into the analysis.
+
+    🗂️ **Research Transparency:** Tool usage details and sources are documented above for verification and reproducibility.
+
+  no_tools_response_template: |
+    ⚠️  **NO TOOL USAGE DETECTED**
+    This response may not include specialized research data.
+
+    📄 **AGENT RESPONSE:**
+    {final_response}
+
+    💡 **Note:** No tool usage or specialized research detected. Response may be based on general knowledge only.
+
+  methodology_section_template: |
+    🔬 **RESEARCH METHODOLOGY**
+    - **Research Method:** Tool-based research with Google Search integration
+    - **Tools Used:** {tool_usage_count} tool invocations detected
+    - **Web Sources Found:** {sources_count} sources consulted
+    - **Agent Model:** {model_id}
+    - **Research Query:** {query}
+
+    🔄 **PROCESSING STEPS:**
+    1. Query received and enhanced with research prompt
+    2. Google Search tool automatically triggered
+    3. {sources_count} web sources discovered and analyzed
+    4. Agent synthesized information into comprehensive report
+    5. Results formatted and saved as markdown
+
+  deep_research_methodology_template: |
+    🔬 **DEEP RESEARCH METHODOLOGY**
+    Research Method: {research_method}
+    Query Decomposition: {sub_questions_count} sub-questions generated
+    RAG System Queries: {successful_rag}/{total_rag} successful
+    Current Research Queries: {successful_search}/{total_search} successful
+    Total Sources Consulted: {total_sources}
+
+    📋 **SUB-QUESTIONS RESEARCHED:**
+    {sub_questions_list}
 
 error_messages:
   no_rag_response: |

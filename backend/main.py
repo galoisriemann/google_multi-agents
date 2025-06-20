@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Dict, Any
 
 from data_model.data_models import WorkflowInput, WorkflowStatus
-from workflow_manager import WorkflowPaths, ConfigLoader, WorkflowManager
+from workflow_manager_rag import WorkflowPaths, ConfigLoader, WorkflowManager
 
 # Configure logging with more detailed format
 logging.basicConfig(
