@@ -1,0 +1,17 @@
+# Gemini API Configuration for Coding Assistant
+api_config:
+  provider: "gemini"
+  api_key: "AIzaSyCs7T6qdSPA3r16W_q01fCzKZvn-5DAioI"
+  
+# Model configuration for coding tasks
+model_config:
+  default_model: "gemini-1.5-flash"
+  code_model: "gemini-1.5-flash"  # Optimized for code generation
+  review_model: "gemini-1.5-flash"  # For code review tasks
+  
+# Rate limiting and performance for coding
+performance_config:
+  max_requests_per_minute: 60
+  timeout_seconds: 60
+  retry_attempts: 2
+  enable_structured_output: true  # For code generation 

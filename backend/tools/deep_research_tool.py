@@ -23,7 +23,7 @@ from workflow_manager_rag import CleanedMCPToolset
 
 
 def load_config() -> Dict:
-    """Load configuration from workflow_deepresearch.yml file.
+    """Load configuration from workflow_research.yml file.
     
     Returns:
         Dictionary containing the complete workflow configuration.
@@ -32,7 +32,7 @@ def load_config() -> Dict:
         FileNotFoundError: If configuration file is not found.
         yaml.YAMLError: If YAML parsing fails.
     """
-    config_path = Path("backend/config/deepresearch/workflow_deepresearch.yml")
+    config_path = Path("backend/config/research/workflow_research.yml")
     try:
         with open(config_path, 'r', encoding='utf-8') as file:
             config = yaml.safe_load(file)
@@ -56,8 +56,8 @@ def load_prompts_config(config: Dict) -> Dict:
         FileNotFoundError: If prompts configuration file is not found.
         yaml.YAMLError: If YAML parsing fails.
     """
-    deep_research_config = config.get('deep_research_config', {})
-    prompts_file = deep_research_config.get('prompts_config_file', 'backend/prompts/deepresearch/prompts_deepresearch.yml')
+    research_config = config.get('research_config', {})
+    prompts_file = research_config.get('prompts_config_file', 'backend/prompts/research/prompts_research.yml')
     prompts_path = Path(prompts_file)
     
     try:
@@ -79,7 +79,7 @@ def setup_research_logger(config: Dict) -> logging.Logger:
     Returns:
         Configured logger instance.
     """
-    logging_config = config.get('deep_research_config', {}).get('logging_config', {})
+    logging_config = config.get('research_config', {}).get('logging_config', {})
     
     if not logging_config.get('enabled', True):
         return logging.getLogger('deep_research_disabled')
@@ -274,7 +274,7 @@ async def current_research_query(
     formatted_prompt = prompt_template.format(question=question)
     
     # Get source label from main config
-    research_config = config.get('deep_research_config', {}).get('research_config', {})
+    research_config = config.get('research_config', {})
     source_label = research_config.get('source_label', 'Current research')
     
     try:
@@ -365,9 +365,8 @@ async def decompose_query(query: str, config: Dict) -> List[str]:
         List of sub-questions.
     """
     # Get configuration values
-    deep_research_config = config.get('deep_research_config', {})
-    process_config = deep_research_config.get('process_config', {})
-    max_questions = process_config.get('max_sub_questions', 2)
+    research_config = config.get('research_config', {})
+    max_questions = research_config.get('max_sub_questions', 2)
     
     # Load prompts configuration
     prompts_config = load_prompts_config(config)
@@ -506,8 +505,7 @@ async def synthesize_findings(
         logger.info("Using simple synthesis approach")
     
     # Get other configuration
-    deep_research_config = config.get('deep_research_config', {})
-    research_config = deep_research_config.get('research_config', {})
+    research_config = config.get('research_config', {})
     
     logger.info("Starting synthesis of research findings")
     
@@ -545,13 +543,13 @@ async def synthesize_findings(
         ])
     
     # Add configuration summary
-    process_config = deep_research_config.get('process_config', {})
+    process_config = research_config.get('process_config', {})
     synthesis_parts.extend([
         "## Configuration Summary",
         f"- Max sub-questions: {process_config.get('max_sub_questions', 'default')}",
         f"- Error handling: {process_config.get('enable_error_handling', 'default')}",
         f"- Source citation: {process_config.get('enable_source_citation', 'default')}",
-        f"- Logging enabled: {deep_research_config.get('logging_config', {}).get('enabled', 'default')}",
+        f"- Logging enabled: {research_config.get('logging_config', {}).get('enabled', 'default')}",
         "",
         "## Summary",
         "This research utilized the configured deep research workflow with proper ADK MCPToolset integration.",
@@ -610,7 +608,7 @@ async def deep_research(query: str) -> str:
         logger.info(formatted_log)
         
         # Log configuration validation
-        required_sections = ['deep_research_config', 'mcp_config', 'app_config']
+        required_sections = ['research_config', 'mcp_config', 'app_config']
         for section in required_sections:
             if section in config:
                 logger.info(f"✅ Configuration section '{section}' loaded")
@@ -654,7 +652,7 @@ async def deep_research(query: str) -> str:
         final_response = await synthesize_findings(query, findings, config, logger)
         
         # Step 4: Export results if configured
-        logging_config = config.get('deep_research_config', {}).get('logging_config', {})
+        logging_config = config.get('research_config', {}).get('logging_config', {})
         if logging_config.get('include_json_export', False):
             export_data = {
                 'query': query,
@@ -662,7 +660,7 @@ async def deep_research(query: str) -> str:
                 'config_used': {
                     'name': config.get('name'),
                     'version': config.get('version'),
-                    'max_sub_questions': config.get('deep_research_config', {}).get('process_config', {}).get('max_sub_questions'),
+                    'max_sub_questions': config.get('research_config', {}).get('process_config', {}).get('max_sub_questions'),
                     'mcp_endpoint': config.get('mcp_config', {}).get('rag_mcp_endpoint'),
                 },
                 'sub_questions': sub_questions,

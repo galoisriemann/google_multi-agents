@@ -1,0 +1,56 @@
+name: "Search Agent Workflow"
+description: "Simple search agent using Google ADK search capabilities"
+version: "1.0.0"
+
+# Core Configuration (standardized across all agents)
+core_config:
+  model: "gemini-2.0-flash"
+  temperature: 0.7
+  max_tokens: 4000
+  timeout: 60
+
+# App Configuration (standardized across all agents)  
+app_config:
+  app_name: "search_agent_app"
+  user_id: "search_user"
+  session_id: "search_session"
+  output_dir: "backend/output"
+
+# Agent Configuration
+agent_config:
+  name: "SearchAgent"
+  description: "An agent with autonomous search capabilities"
+  
+# Search-specific configuration
+search_config:
+  max_results: 5
+  max_results_display: 3
+  enable_function_calling: true
+  grounding_chunks_display: 3
+  
+# Tools configuration
+tools_config:
+  google_search:
+    enabled: true
+    max_results: 5
+    timeout: 30
+
+# Display and formatting configuration    
+display_config:
+  separator_length: 50
+  content_preview_length: 500
+  text_preview_length: 100
+  source_content_max_length: 500
+
+# Session configuration
+session_config:
+  fallback_user_id: "workflow_user"
+  fallback_session_id: "search_session"
+  fallback_app_name: "SearchWorkflow"
+  default_query: "User query"
+
+metadata:
+  created_at: "2024-12-20"
+  author: "System"
+  agent_type: "search"
+  description: "Complete configuration for autonomous search agent" 

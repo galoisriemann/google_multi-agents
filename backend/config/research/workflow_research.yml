@@ -1,0 +1,100 @@
+name: "Research Agent Workflow"
+description: "Advanced research agent with RAG and search capabilities"
+version: "1.0.0"
+
+# Core Configuration (standardized across all agents)
+core_config:
+  model: "gemini-2.0-flash"
+  temperature: 0.3
+  max_tokens: 8000
+  timeout: 60
+
+# App Configuration (standardized across all agents)
+app_config:
+  app_name: "research_agent_app"
+  user_id: "research_user"
+  session_id: "research_session"
+  output_dir: "backend/output"
+
+# Agent Configuration
+agent_config:
+  name: "research_agent"
+  description: "Advanced research agent with RAG and search capabilities"
+
+# MCP Configuration for RAG integration
+mcp_config:
+  default_mode: "adk_toolset"
+  rag_mcp_endpoint: "http://localhost:8000/mcp"
+  
+  adk_toolset:
+    allowed_tools:
+      - "get_generative_search_response"
+      - "deep_research"
+    sse_endpoint_suffix: "/sse"
+    
+    agent:
+      name: "research_agent"
+      description: "Advanced research agent with RAG and search capabilities"
+      
+      tools:
+        google_search:
+          enabled: true
+          description: "Google Search for current information"
+          max_retries: 3
+        rag_tool:
+          enabled: true
+          description: "RAG system for specialized knowledge"
+          max_retries: 3
+
+# Research-specific configuration
+research_config:
+  max_sub_questions: 2
+  enable_error_handling: true
+  enable_source_citation: true
+  source_label: "LLM knowledge (focus on current information)"
+  
+  # RAG system configuration
+  rag_config:
+    mcp_endpoint: "http://localhost:8000/mcp"
+    timeout_seconds: 30
+    top_k_results: 5
+    retry_attempts: 3
+    
+  # Output configuration
+  output_config:
+    reports_directory: "output/reports"
+    auto_save_markdown: true
+    include_timestamp: true
+    
+  # Logging configuration
+  logging_config:
+    enabled: true
+    log_directory: "data/logs"
+    log_level: "INFO"
+    include_json_export: true
+    console_output: true
+
+# Display and formatting configuration
+display_config:
+  separator_length: 80
+  sub_query_preview_length: 60
+  text_preview_length: 200
+  
+# Prompt enhancement configuration
+prompt_config:
+  enable_auto_enhancement: true
+  market_research_keywords: ["market analysis", "market research", "market report", "market study"]
+  default_template_type: "general_research"
+
+# Session configuration
+session_config:
+  fallback_user_id: "researcher_user"
+  fallback_session_id: "research_session_default"
+  fallback_app_name: "ResearchWorkflow"
+  default_query: "Research query"
+
+metadata:
+  created_at: "2024-12-20"
+  author: "System"
+  agent_type: "research"
+  description: "Complete configuration for research agent with RAG and search integration" 

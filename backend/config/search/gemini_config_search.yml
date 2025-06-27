@@ -1,0 +1,32 @@
+# Gemini API Configuration for Search Agent
+api_config:
+  provider: "gemini"
+  api_key: "AIzaSyCs7T6qdSPA3r16W_q01fCzKZvn-5DAioI"
+  base_url: "https://generativelanguage.googleapis.com"
+  
+# Model-specific configuration
+model_config:
+  default_model: "gemini-2.0-flash"
+  backup_model: "gemini-1.5-flash"
+  model_parameters:
+    top_p: 0.95
+    top_k: 40
+    safety_settings:
+      harassment: "BLOCK_MEDIUM_AND_ABOVE"
+      hate_speech: "BLOCK_MEDIUM_AND_ABOVE"
+      sexually_explicit: "BLOCK_MEDIUM_AND_ABOVE"
+      dangerous_content: "BLOCK_MEDIUM_AND_ABOVE"
+  
+# Rate limiting and performance (API-specific)
+performance_config:
+  max_requests_per_minute: 60
+  timeout_seconds: 60
+  retry_attempts: 3
+  retry_delay: 1.0
+  max_concurrent_requests: 5
+
+# Grounding configuration (Gemini-specific)
+grounding_config:
+  enable_grounding: true
+  search_engine: "google"
+  grounding_threshold: 0.7 

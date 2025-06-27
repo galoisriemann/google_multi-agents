@@ -1,0 +1,79 @@
+name: "Coding Assistant Workflow"
+description: "Sequential workflow for code generation, review, and refactoring"
+version: "1.0.0"
+
+# Agent Configuration - valid identifier name for ADK
+agent_config:
+  name: "CodingPipelineAgent"  # Valid identifier without spaces
+  description: "Executes a sequence of code writing, reviewing, and refactoring"
+
+# API Configuration 
+api_config:
+  provider: "gemini"
+  model: "gemini-1.5-flash"
+  temperature: 0.0
+  max_tokens: 4096
+  timeout: 60
+
+# Core Configuration (standardized across all agents)
+core_config:
+  model: "gemini-1.5-flash"
+  temperature: 0.0  # Deterministic for code generation
+  max_tokens: 4096
+  timeout: 60
+
+# App Configuration (standardized across all agents)
+app_config:
+  app_name: "coding_assistant_app"
+  user_id: "coding_user"
+  session_id: "coding_session"
+  output_dir: "backend/output"
+
+# Coding workflow steps
+steps:
+  - name: "CodeWriterAgent"
+    model: "gemini-1.5-flash"
+    prompt_key: "code_writer"
+    description: "Writes initial Python code based on a specification"
+    output_key: "generated_code"
+    parameters:
+      temperature: 0.0
+      max_tokens: 2048
+
+  - name: "CodeReviewerAgent"
+    model: "gemini-1.5-flash"
+    prompt_key: "code_reviewer"
+    description: "Reviews code and provides feedback"
+    output_key: "review_comments"
+    parameters:
+      temperature: 0.0
+      max_tokens: 1024
+
+  - name: "CodeRefactorerAgent"
+    model: "gemini-1.5-flash"
+    prompt_key: "code_refactorer"
+    description: "Refactors code based on review comments"
+    output_key: "refactored_code"
+    parameters:
+      temperature: 0.0
+      max_tokens: 2048
+
+# Coding-specific configuration
+coding_config:
+  languages:
+    - "python"
+    - "javascript"
+    - "typescript"
+  enable_linting: true
+  enable_testing: true
+  code_style: "pythonic"
+
+metadata:
+  created_at: "2024-12-20"
+  author: "System"
+  agent_type: "coding"
+  description: "Sequential coding workflow with generation, review, and refactoring"
+  tags:
+    - "code-generation"
+    - "code-review"
+    - "refactoring" 
