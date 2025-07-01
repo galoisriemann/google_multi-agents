@@ -1,0 +1,199 @@
+name: "Flexible Agent Workflow - Load Balanced"
+description: "Advanced configurable workflow with load-balanced model distribution"
+version: "0.2"
+
+# Agent Configuration - main agent identifier
+agent_config:
+  name: "FlexiblePipelineAgent"
+  description: "Orchestrates flexible workflows with load-balanced model distribution"
+
+# API Configuration 
+api_config:
+  provider: "gemini"
+  model: "gemini-2.0-flash-exp"  # Using experimental model to avoid quota limits
+  temperature: 0.0
+  max_tokens: 4096
+  timeout: 60
+
+# Core Configuration (standardized across all agents)
+core_config:
+  model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+  temperature: 0.0
+  max_tokens: 4096
+  timeout: 60
+
+# App Configuration (standardized across all agents)
+app_config:
+  app_name: "flexible_agent_app"
+  user_id: "flexible_user"
+  session_id: "flexible_session"
+  output_dir: "backend/output"
+
+# Main agent orchestrating the workflow
+main_agent: "MainFlexibleOrchestrator"
+
+# Flexible workflow agents with LOAD-BALANCED model distribution
+agents:
+  # Individual LLM Agents - ALL USING SAME MODEL TO AVOID QUOTA LIMITS
+  - name: "RequirementAnalyzer"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Analyzes user requirements and creates specifications"
+    prompt_key: "requirement_analyzer"
+    output_key: "analyzed_requirements"
+    parameters:
+      temperature: 0.0
+      max_tokens: 2048
+    tools: ["text_analyzer"]
+
+  - name: "ArchitecturalDesigner"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Designs system architecture based on requirements"
+    prompt_key: "architectural_designer"
+    output_key: "system_architecture"
+    parameters:
+      temperature: 0.0
+      max_tokens: 4096
+
+  - name: "CodeGenerator"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Generates code based on architecture and requirements"
+    prompt_key: "code_generator"
+    output_key: "generated_code"
+    parameters:
+      temperature: 0.0
+      max_tokens: 4096
+    tools: ["code_formatter"]
+
+  # Parallel agents for code review - ALL USING SAME MODEL FOR CONSISTENCY
+  - name: "SecurityReviewer"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Reviews code for security vulnerabilities"
+    prompt_key: "security_reviewer"
+    output_key: "security_review"
+    parameters:
+      temperature: 0.0
+      max_tokens: 1024
+
+  - name: "PerformanceReviewer"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Reviews code for performance optimization"
+    prompt_key: "performance_reviewer"
+    output_key: "performance_review"
+    parameters:
+      temperature: 0.0
+      max_tokens: 1024
+
+  - name: "QualityReviewer"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Reviews code quality and best practices"
+    prompt_key: "quality_reviewer"
+    output_key: "quality_review"
+    parameters:
+      temperature: 0.0
+      max_tokens: 1024
+
+  # Parallel agent orchestrator
+  - name: "ParallelReviewOrchestrator"
+    type: "ParallelAgent"
+    description: "Orchestrates parallel code reviews using same model for consistency"
+    sub_agents: ["SecurityReviewer", "PerformanceReviewer", "QualityReviewer"]
+
+  # Code refactorer
+  - name: "CodeRefactorer"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Refactors code based on review feedback"
+    prompt_key: "code_refactorer"
+    output_key: "refactored_code"
+    parameters:
+      temperature: 0.0
+      max_tokens: 4096
+    tools: ["code_formatter", "data_validator"]
+
+  # Documentation generator
+  - name: "DocumentationGenerator"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Generates comprehensive documentation"
+    prompt_key: "documentation_generator"
+    output_key: "documentation"
+    parameters:
+      temperature: 0.1
+      max_tokens: 4096
+    tools: ["text_processor"]
+
+  # Main orchestrator - runs everything sequentially
+  - name: "MainFlexibleOrchestrator"
+    type: "SequentialAgent"
+    description: "Main flexible workflow orchestrator with load balancing"
+    sub_agents: 
+      - "RequirementAnalyzer"
+      - "ArchitecturalDesigner"
+      - "CodeGenerator"
+      - "ParallelReviewOrchestrator"
+      - "CodeRefactorer"
+      - "DocumentationGenerator"
+
+# Model strategy explanation
+model_strategy:
+  gemini-2.5-flash:
+    agents: ["RequirementAnalyzer", "ArchitecturalDesigner", "CodeGenerator", "SecurityReviewer", "PerformanceReviewer", "QualityReviewer", "CodeRefactorer", "DocumentationGenerator"]
+    use_case: "All tasks using experimental model to avoid quota limits"
+    benefits:
+      - "Avoids quota exhaustion on 1.5-pro model"
+      - "Uses latest experimental features"
+      - "Simplified configuration with single model"
+      - "Consistent performance across all agents"
+    concurrent_capacity: "High - experimental model with potentially higher quotas"
+
+# Flexible-specific configuration
+flexible_config:
+  enable_parallel_processing: true
+  enable_loop_workflows: false
+  max_loop_iterations: 5
+  supported_agent_types:
+    - "LlmAgent"
+    - "SequentialAgent"
+    - "ParallelAgent"
+    - "LoopAgent"
+  languages:
+    - "python"
+    - "javascript"
+    - "typescript"
+    - "java"
+    - "go"
+  enable_linting: true
+  enable_testing: true
+  enable_documentation: true
+  code_style: "pythonic"
+  
+  # Model fallback settings
+  model_fallbacks:
+    enabled: true
+    retry_with_fallback_model: true
+    fallback_models:
+      gemini-2.0-flash-exp: ["gemini-1.5-flash", "gemini-2.0-flash"]
+      gemini-2.0-flash: ["gemini-1.5-flash"]
+      gemini-1.5-flash: ["gemini-1.0-pro"]
+
+metadata:
+  created_at: "2024-12-20"
+  author: "System"
+  agent_type: "flexible"
+  description: "Flexible workflow using gemini-2.0-flash-exp to avoid quota limits"
+  tags:
+    - "flexible-architecture"
+    - "multi-agent"
+    - "parallel-processing"
+    - "quota-optimized"
+    - "experimental-model"
+    - "fault-tolerant"
+    - "code-generation"
+    - "code-review"
+    - "documentation" 
