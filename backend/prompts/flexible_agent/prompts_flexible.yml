@@ -89,7 +89,8 @@ prompts:
     - Performance optimizations
     - Maintainability features
     
-    Requirements: {analyzed_requirements}
+    **Requirements Context:**
+    {analyzed_requirements}
     
     Create a detailed architectural design following the format above.
 
@@ -150,6 +151,7 @@ prompts:
     # Setup and usage commands
     ```
     
+    **Context from Previous Steps:**
     Architecture: {system_architecture}
     Requirements: {analyzed_requirements}
     
@@ -201,7 +203,10 @@ prompts:
     - OWASP Top 10 considerations
     - Industry standard compliance
     
+    **Context for Review:**
     Code to Review: {generated_code}
+    System Architecture: {system_architecture}
+    Requirements: {analyzed_requirements}
     
     Provide a comprehensive security analysis following the format above.
 
@@ -255,7 +260,10 @@ prompts:
     - Tools and techniques for optimization
     - Monitoring and profiling recommendations
     
+    **Context for Review:**
     Code to Review: {generated_code}
+    System Architecture: {system_architecture}
+    Requirements: {analyzed_requirements}
     
     Provide a detailed performance analysis following the format above.
 
@@ -312,7 +320,10 @@ prompts:
     - Tools and practices to adopt
     - Refactoring suggestions
     
+    **Context for Review:**
     Code to Review: {generated_code}
+    System Architecture: {system_architecture}
+    Requirements: {analyzed_requirements}
     
     Provide a thorough code quality analysis following the format above.
 
@@ -369,7 +380,10 @@ prompts:
     - How to migrate from old to new implementation
     - Breaking changes (if any)
     
+    **Context and Review Inputs:**
     Original Code: {generated_code}
+    System Architecture: {system_architecture}
+    Requirements: {analyzed_requirements}
     Security Review: {security_review}
     Performance Review: {performance_review}
     Quality Review: {quality_review}
@@ -447,6 +461,16 @@ prompts:
     ## Deployment Guide
     ```
     
+    ### Quality and Security Notes
+    ```markdown
+    # Quality and Security Report
+    
+    ## Code Quality Summary
+    ## Security Assessment
+    ## Performance Characteristics
+    ## Known Limitations
+    ```
+    
     ### Changelog
     ```markdown
     # Changelog
@@ -456,19 +480,24 @@ prompts:
     ## Migration Guides
     ```
     
+    **Complete Context for Documentation:**
     Final Code: {refactored_code}
-    Architecture: {system_architecture}
+    System Architecture: {system_architecture}
     Requirements: {analyzed_requirements}
+    Security Review Summary: {security_review}
+    Performance Review Summary: {performance_review}
+    Quality Review Summary: {quality_review}
     
     Create comprehensive documentation following the format above.
 
 metadata:
   created_at: "2024-12-20"
-  version: "2.0.0"
-  description: "Comprehensive prompts for flexible agent workflow system"
+  version: "2.1.0"
+  description: "Enhanced prompts for flexible agent workflow system with proper data flow"
   author: "System"
   agent_count: 7
   workflow_type: "flexible_multi_agent"
+  data_flow_optimized: true
   tags:
     - "requirements-analysis"
     - "architectural-design"

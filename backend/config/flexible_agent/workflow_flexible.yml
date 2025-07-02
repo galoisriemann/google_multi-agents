@@ -41,6 +41,7 @@ agents:
     description: "Analyzes user requirements and creates specifications"
     prompt_key: "requirement_analyzer"
     output_key: "analyzed_requirements"
+    input_key: null  # Optional: PDF with business requirements
     parameters:
       temperature: 0.0
       max_tokens: 2048
@@ -52,6 +53,7 @@ agents:
     description: "Designs system architecture based on requirements"
     prompt_key: "architectural_designer"
     output_key: "system_architecture"
+    input_key: null  # Optional: Architecture standards document
     parameters:
       temperature: 0.0
       max_tokens: 4096
@@ -62,6 +64,7 @@ agents:
     description: "Generates code based on architecture and requirements"
     prompt_key: "code_generator"
     output_key: "generated_code"
+    input_key: "coding_standards.pdf"  # Optional: Coding standards and examples
     parameters:
       temperature: 0.0
       max_tokens: 4096
@@ -74,6 +77,7 @@ agents:
     description: "Reviews code for security vulnerabilities"
     prompt_key: "security_reviewer"
     output_key: "security_review"
+    input_key: null  # Optional: Security review checklist
     parameters:
       temperature: 0.0
       max_tokens: 1024
@@ -84,6 +88,7 @@ agents:
     description: "Reviews code for performance optimization"
     prompt_key: "performance_reviewer"
     output_key: "performance_review"
+    input_key: null  # Optional: Performance optimization guidelines
     parameters:
       temperature: 0.0
       max_tokens: 1024
@@ -94,6 +99,7 @@ agents:
     description: "Reviews code quality and best practices"
     prompt_key: "quality_reviewer"
     output_key: "quality_review"
+    input_key: null  # Optional: Quality review standards
     parameters:
       temperature: 0.0
       max_tokens: 1024
@@ -101,6 +107,7 @@ agents:
   # Parallel agent orchestrator
   - name: "ParallelReviewOrchestrator"
     type: "ParallelAgent"
+    model: "gemini-2.5-flash"  
     description: "Orchestrates parallel code reviews using same model for consistency"
     sub_agents: ["SecurityReviewer", "PerformanceReviewer", "QualityReviewer"]
 
@@ -111,6 +118,7 @@ agents:
     description: "Refactors code based on review feedback"
     prompt_key: "code_refactorer"
     output_key: "refactored_code"
+    input_key: null # Optional: Refactoring patterns and best practices
     parameters:
       temperature: 0.0
       max_tokens: 4096
@@ -123,6 +131,7 @@ agents:
     description: "Generates comprehensive documentation"
     prompt_key: "documentation_generator"
     output_key: "documentation"
+    input_key: null  # Optional: Documentation templates and standards
     parameters:
       temperature: 0.1
       max_tokens: 4096

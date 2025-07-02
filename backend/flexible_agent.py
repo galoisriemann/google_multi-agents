@@ -27,10 +27,12 @@ if __name__ == "__main__" and not __package__:
 try:
     from backend.data_model.data_models import WorkflowInput, WorkflowStatus
     from backend.core.config.config_loader import ConfigLoader
+    from backend.core.utils.document_reader import DocumentReader, DocumentReaderError
 except ImportError:
     # If absolute imports fail, try relative imports for direct execution
     from data_model.data_models import WorkflowInput, WorkflowStatus
     from core.config.config_loader import ConfigLoader
+    from core.utils.document_reader import DocumentReader, DocumentReaderError
 
 # Third-party imports
 from pydantic import BaseModel, Field, ValidationError
@@ -67,6 +69,7 @@ class FlexibleAgentConfig(BaseModel):
     description: Optional[str] = None
     instruction: Optional[str] = None
     prompt_key: Optional[str] = None  # Key to load prompt from prompts config
+    input_key: Optional[str] = None  # Filename of input document (PDF/DOCX) to inject as context
     tools: List[str] = Field(default_factory=list)
     output_key: Optional[str] = None
     sub_agents: List[str] = Field(default_factory=list)
@@ -190,18 +193,37 @@ FLEXIBLE_AGENT_CLASSES: Dict[str, Type[BaseAgent]] = {
 class FlexibleAgentFactory:
     """Factory for creating flexible agents from configuration."""
     
-    def __init__(self, configs: List[FlexibleAgentConfig], prompts_loader: ConfigLoader):
+    def __init__(self, configs: List[FlexibleAgentConfig], prompts_loader: ConfigLoader, input_directory: Optional[Path] = None):
         """Initialize the flexible agent factory."""
         self.configs = {c.name: c for c in configs}
         self.instances: Dict[str, BaseAgent] = {}
         self.prompts_loader = prompts_loader
+        self.document_reader = DocumentReader(input_directory)
 
-    def _get_prompt(self, prompt_key: str) -> str:
-        """Get prompt from prompts configuration file."""
+    def _get_prompt(self, prompt_key: str, agent_config: FlexibleAgentConfig) -> str:
+        """Get prompt from prompts configuration file and inject input file content if available."""
         try:
             prompt = self.prompts_loader.get_value(f"prompts.{prompt_key}")
             if not prompt:
                 raise ValueError(f"Prompt '{prompt_key}' not found in prompts configuration")
+            
+            # Inject input file content if specified
+            input_content = ""
+            if hasattr(agent_config, 'input_key') and agent_config.input_key:
+                try:
+                    input_content = self.document_reader.read_document(agent_config.input_key)
+                    if input_content:
+                        logger.info(f"Loaded input document '{agent_config.input_key}' for agent '{agent_config.name}'")
+                    else:
+                        logger.info(f"No input document found for '{agent_config.input_key}' - using empty content")
+                except DocumentReaderError as e:
+                    logger.warning(f"Failed to read input document '{agent_config.input_key}': {e}")
+                    input_content = ""
+            
+            # Inject input content into prompt if available
+            if input_content:
+                prompt = f"{prompt}\n\n**Additional Input Document:**\n{input_content}"
+            
             return prompt
         except Exception as e:
             logger.error(f"Failed to load prompt '{prompt_key}': {e}")
@@ -259,7 +281,7 @@ class FlexibleAgentFactory:
                 
                 # Get instruction from prompt_key or direct instruction
                 if cfg.prompt_key:
-                    kwargs["instruction"] = self._get_prompt(cfg.prompt_key)
+                    kwargs["instruction"] = self._get_prompt(cfg.prompt_key, cfg)
                     logger.debug(f"   Added instruction from prompt_key: {cfg.prompt_key}")
                 elif cfg.instruction:
                     kwargs["instruction"] = cfg.instruction
@@ -351,26 +373,14 @@ class FlexibleWorkflowManager:
         try:
             # Main workflow configuration
             workflow_config_path = self.config_dir / "workflow_flexible.yml"
-            if not workflow_config_path.exists():
-                # Fallback to coding config for demo
-                workflow_config_path = self.base_dir / "config" / "coding" / "workflow_coding.yml"
-            
             self.config_loader = ConfigLoader(workflow_config_path)
             
             # Gemini configuration
             gemini_config_path = self.config_dir / "gemini_config_flexible.yml"
-            if not gemini_config_path.exists():
-                # Fallback to coding config for demo
-                gemini_config_path = self.base_dir / "config" / "coding" / "gemini_config_coding.yml"
-            
             self.gemini_config_loader = ConfigLoader(gemini_config_path)
             
             # Prompts configuration
             prompts_config_path = self.base_dir / "prompts" / "flexible_agent" / "prompts_flexible.yml"
-            if not prompts_config_path.exists():
-                # Fallback to coding config for demo
-                prompts_config_path = self.base_dir / "prompts" / "coding" / "prompts_coding.yml"
-            
             self.prompts_loader = ConfigLoader(prompts_config_path)
             
             # Load configurations
@@ -462,7 +472,8 @@ class FlexibleWorkflowManager:
             logger.info(f"Flexible Workflow: {workflow_config.name} v{workflow_config.version}")
             
             # Create agent factory and build all agents
-            factory = FlexibleAgentFactory(workflow_config.agents, self.prompts_loader)
+            input_directory = self.base_dir / "input"
+            factory = FlexibleAgentFactory(workflow_config.agents, self.prompts_loader, input_directory)
             self.all_agents = factory.build_all()
             
             # Get the main agent
@@ -500,9 +511,19 @@ class FlexibleWorkflowManager:
         start_time = datetime.now()
         logger.info(f"🚀 Starting flexible workflow for request: {user_request}")
         
+        # Setup incremental saving
+        timestamp = start_time.strftime("%Y%m%d_%H%M%S")
+        output_dir = Path(self.config_loader.get_value("app_config.output_dir", "backend/output"))
+        incremental_dir = output_dir / f"incremental_{timestamp}"
+        incremental_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save initial workflow metadata
+        await self._save_workflow_metadata(incremental_dir, user_request, start_time)
+        
         # Track agent execution for better error reporting
         current_agent = None
         executed_agents = []
+        agent_outputs = {}  # Store outputs for incremental saving
         
         try:
             # Initialize if not already done
@@ -518,6 +539,8 @@ class FlexibleWorkflowManager:
             # Execute the workflow
             response_text = ""
             final_state = {}
+            agent_execution_order = {}
+            last_saved_state = {}
 
             async for event in self.runner.run_async(
                 user_id=self.session.user_id,
@@ -525,11 +548,12 @@ class FlexibleWorkflowManager:
                 new_message=content
             ):
                 # Track which agent is currently executing
-                if hasattr(event, 'agent_name'):
+                if hasattr(event, 'agent_name') and event.agent_name:
                     current_agent = event.agent_name
                     if current_agent not in executed_agents:
                         executed_agents.append(current_agent)
-                        logger.info(f"🤖 Executing agent: {current_agent}")
+                        agent_execution_order[current_agent] = len(executed_agents)
+                        logger.info(f"🤖 Executing agent: {current_agent} (#{len(executed_agents)})")
                 
                 # Extract final response
                 if event.is_final_response() and event.content and event.content.parts:
@@ -537,13 +561,55 @@ class FlexibleWorkflowManager:
                         if part.text:
                             response_text += part.text
                 
-                # Extract state information if available
+                # Extract state information and save immediately when outputs are available
                 if hasattr(event, 'state') and event.state:
+                    for key, value in event.state.items():
+                        # Check if this is a new or updated output
+                        if (key not in last_saved_state or last_saved_state[key] != value) and value and isinstance(value, str) and len(value.strip()) > 0:
+                            # New or updated output detected - save immediately
+                            execution_order = agent_execution_order.get(key, len([a for a in executed_agents if a == key]) or len(executed_agents))
+                            await self._save_agent_output_incremental(
+                                incremental_dir, key, value, execution_order, agent_outputs
+                            )
+                            last_saved_state[key] = value
+                            logger.info(f"🔄 Real-time saved output for agent: {key}")
+                    
                     final_state.update(event.state)
+                
+                # Also check for agent completion events
+                if hasattr(event, 'content') and event.content and hasattr(event, 'author'):
+                    agent_name = event.author
+                    if agent_name and agent_name != 'user' and agent_name in executed_agents:
+                        # Check if this agent has an output in the current state
+                        if agent_name in final_state and agent_name not in agent_outputs:
+                            value = final_state[agent_name]
+                            if value and isinstance(value, str) and len(value.strip()) > 0:
+                                execution_order = agent_execution_order.get(agent_name, len(executed_agents))
+                                await self._save_agent_output_incremental(
+                                    incremental_dir, agent_name, value, execution_order, agent_outputs
+                                )
+                                logger.info(f"🏁 Agent completed and saved: {agent_name}")
+            
+            # Final cleanup: ensure any remaining outputs are saved
+            for agent_name in executed_agents:
+                if agent_name in final_state and agent_name not in agent_outputs:
+                    value = final_state[agent_name]
+                    if value and isinstance(value, str) and len(value.strip()) > 0:
+                        execution_order = agent_execution_order.get(agent_name, len(executed_agents))
+                        await self._save_agent_output_incremental(
+                            incremental_dir, agent_name, value, execution_order, agent_outputs
+                        )
+                        logger.info(f"🔚 Final cleanup saved: {agent_name}")
             
             # Get the final state from the session
             if not final_state and self.session:
                 final_state = getattr(self.session, 'state', {})
+                # Save any remaining outputs from session state
+                for key, value in final_state.items():
+                    if key not in agent_outputs and value:
+                        await self._save_agent_output_incremental(
+                            incremental_dir, key, value, len(executed_agents), agent_outputs
+                        )
             
             execution_time = (datetime.now() - start_time).total_seconds()
             
@@ -561,15 +627,20 @@ class FlexibleWorkflowManager:
                     "agents_executed": executed_agents,
                     "main_agent": self.main_agent.name,
                     "total_agents": len(self.all_agents),
-                    "model_used": self.config_loader.get_value("core_config.model", "gemini-1.5-flash")
+                    "model_used": self.config_loader.get_value("core_config.model", "gemini-1.5-flash"),
+                    "incremental_output_dir": str(incremental_dir)
                 },
                 "state": final_state
             }
             
-            # Save results
+            # Save final comprehensive results
             await self._save_results(result)
             
+            # Save final summary to incremental directory
+            await self._save_final_summary(incremental_dir, result, executed_agents, agent_outputs)
+            
             logger.info(f"✅ Flexible workflow completed successfully in {execution_time:.2f}s")
+            logger.info(f"📁 Incremental outputs saved to: {incremental_dir}")
             return result
             
         except Exception as e:
@@ -587,7 +658,10 @@ class FlexibleWorkflowManager:
             logger.error(f"   Executed Agents: {executed_agents}")
             logger.error(f"   Error Type: {error_details['error_type']}")
             
-            return {
+            # Save error details to incremental directory
+            await self._save_error_details(incremental_dir, error_details, executed_agents, agent_outputs)
+            
+            result = {
                 "status": WorkflowStatus.FAILED,
                 "content": error_msg,
                 "metadata": {
@@ -599,9 +673,266 @@ class FlexibleWorkflowManager:
                     "executed_agents": executed_agents,
                     "workflow_type": "flexible",
                     "workflow_name": self.config_loader.get_value("name", "Flexible Workflow"),
-                    "workflow_version": self.config_loader.get_value("version", "1.0.0")
+                    "workflow_version": self.config_loader.get_value("version", "1.0.0"),
+                    "incremental_output_dir": str(incremental_dir)
                 }
             }
+            
+            logger.info(f"📁 Partial outputs saved to: {incremental_dir}")
+            return result
+
+    async def _save_workflow_metadata(self, incremental_dir: Path, user_request: str, start_time: datetime) -> None:
+        """Save initial workflow metadata and configuration."""
+        try:
+            metadata_file = incremental_dir / "00_workflow_metadata.md"
+            
+            metadata_content = f"""# Flexible Workflow Execution - Metadata
+
+## 🚀 Workflow Information
+- **Workflow Name**: {self.config_loader.get_value('name', 'Flexible Workflow')}
+- **Version**: {self.config_loader.get_value('version', '1.0.0')}
+- **Started**: {start_time.strftime('%Y-%m-%d %H:%M:%S')}
+- **Type**: Flexible Multi-Agent Workflow
+
+## 📝 Original Request
+```
+{user_request}
+```
+
+## 🤖 Agent Configuration
+- **Main Agent**: {self.config_loader.get_value('main_agent', 'MainFlexibleOrchestrator')}
+- **Model**: {self.config_loader.get_value('core_config.model', 'gemini-1.5-flash')}
+- **Total Agents**: {len(self.all_agents) if self.all_agents else 0}
+
+### Available Agents:
+"""
+            
+            if self.all_agents:
+                for i, (name, agent) in enumerate(self.all_agents.items(), 1):
+                    agent_type = type(agent).__name__
+                    metadata_content += f"{i}. **{name}** ({agent_type})\n"
+            
+            metadata_content += f"""
+## 📁 Output Organization
+- This directory contains incremental outputs from each agent
+- Files are numbered in execution order
+- Each agent's output is saved immediately upon completion
+- If the workflow fails, you'll have outputs up to the failure point
+
+---
+*Generated by FlexibleWorkflowManager on {start_time.strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+            
+            with open(metadata_file, 'w', encoding='utf-8') as f:
+                f.write(metadata_content)
+                
+            logger.info(f"📋 Workflow metadata saved: {metadata_file}")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to save workflow metadata: {e}")
+
+    async def _save_agent_output_incremental(
+        self, 
+        incremental_dir: Path, 
+        agent_name: str, 
+        output: str, 
+        execution_order: int,
+        agent_outputs: Dict[str, str]
+    ) -> None:
+        """Save individual agent output immediately as markdown file."""
+        try:
+            if not output or not isinstance(output, str) or len(output.strip()) == 0:
+                return
+            
+            # Avoid duplicate saves
+            if agent_name in agent_outputs:
+                return
+                
+            agent_outputs[agent_name] = output
+            
+            # Create filename with execution order for proper sorting
+            safe_agent_name = agent_name.lower().replace(' ', '_').replace('-', '_')
+            output_file = incremental_dir / f"{execution_order:02d}_{safe_agent_name}.md"
+            
+            # Get agent configuration for context
+            agent_config = self._get_agent_config_for_output(agent_name)
+            
+            # Format output as markdown
+            formatted_output = f"""# {agent_name.replace('_', ' ').title()} Output
+
+## 🤖 Agent Information
+- **Agent Name**: {agent_name}
+- **Agent Type**: {agent_config.get('type', 'Unknown')}
+- **Model**: {agent_config.get('model', 'Unknown')}
+- **Execution Order**: {execution_order}
+- **Timestamp**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## 📊 Output Key
+**Output Key**: `{agent_config.get('output_key', agent_name)}`
+
+## 📝 Generated Output
+
+{output}
+
+---
+*Generated by {agent_name} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+            
+            with open(output_file, 'w', encoding='utf-8') as f:
+                f.write(formatted_output)
+            
+            logger.info(f"💾 Agent output saved: {output_file}")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to save agent output for {agent_name}: {e}")
+
+    def _get_agent_config_for_output(self, agent_name: str) -> Dict[str, Any]:
+        """Get agent configuration for output context."""
+        try:
+            agents_config = self.config_loader.get_value('agents', [])
+            for agent_config in agents_config:
+                if agent_config.get('name') == agent_name:
+                    return agent_config
+            return {"type": "Unknown", "model": "Unknown", "output_key": agent_name}
+        except:
+            return {"type": "Unknown", "model": "Unknown", "output_key": agent_name}
+
+    async def _save_final_summary(
+        self, 
+        incremental_dir: Path, 
+        result: Dict[str, Any], 
+        executed_agents: List[str],
+        agent_outputs: Dict[str, str]
+    ) -> None:
+        """Save final workflow summary to incremental directory."""
+        try:
+            summary_file = incremental_dir / "99_final_summary.md"
+            metadata = result.get("metadata", {})
+            
+            summary_content = f"""# Workflow Execution Summary
+
+## ✅ Final Status: {result.get('status', 'Unknown')}
+
+## 📊 Execution Metrics
+- **Success**: {metadata.get('success', False)}
+- **Execution Time**: {metadata.get('execution_time', 0):.2f} seconds
+- **Total Agents**: {metadata.get('total_agents', 0)}
+- **Agents Executed**: {len(executed_agents)}
+- **Agents with Outputs**: {len(agent_outputs)}
+
+## 🤖 Agent Execution Order
+"""
+            
+            for i, agent in enumerate(executed_agents, 1):
+                status = "✅ Completed" if agent in agent_outputs else "⏸️ No Output"
+                summary_content += f"{i}. **{agent}** - {status}\n"
+            
+            summary_content += f"""
+## 📝 Final Response
+{result.get('content', 'No final response available')}
+
+## 📁 Generated Files
+"""
+            
+            # List all generated files
+            try:
+                for file_path in sorted(incremental_dir.glob("*.md")):
+                    if file_path.name != "99_final_summary.md":
+                        summary_content += f"- `{file_path.name}`\n"
+            except:
+                summary_content += "- Error listing generated files\n"
+            
+            summary_content += f"""
+## 🎯 Workflow Performance
+- **Average time per agent**: {metadata.get('execution_time', 0) / max(len(executed_agents), 1):.2f}s
+- **Success rate**: {len(agent_outputs) / max(len(executed_agents), 1) * 100:.1f}%
+
+---
+*Workflow completed at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+            
+            with open(summary_file, 'w', encoding='utf-8') as f:
+                f.write(summary_content)
+            
+            logger.info(f"📋 Final summary saved: {summary_file}")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to save final summary: {e}")
+
+    async def _save_error_details(
+        self, 
+        incremental_dir: Path, 
+        error_details: Dict[str, Any],
+        executed_agents: List[str],
+        agent_outputs: Dict[str, str]
+    ) -> None:
+        """Save error details and partial results when workflow fails."""
+        try:
+            error_file = incremental_dir / "99_error_report.md"
+            
+            error_content = f"""# ❌ Workflow Execution Failed
+
+## 🚨 Error Details
+- **Failed Agent**: {error_details.get('failed_agent', 'Unknown')}
+- **Agent Type**: {error_details.get('agent_type', 'Unknown')}
+- **Agent Model**: {error_details.get('agent_model', 'Unknown')}
+- **Error Type**: {error_details.get('error_type', 'Unknown')}
+- **Error Category**: {error_details.get('error_category', 'Unknown')}
+- **Timestamp**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+## 📝 Error Message
+```
+{error_details.get('error_message', 'No error message available')}
+```
+
+## ✅ Successfully Completed Agents
+"""
+            
+            for i, agent in enumerate(executed_agents, 1):
+                status = "✅ Completed with Output" if agent in agent_outputs else "⏸️ Executed (No Output)"
+                error_content += f"{i}. **{agent}** - {status}\n"
+            
+            error_content += f"""
+## 📊 Partial Execution Statistics
+- **Total Agents in Workflow**: {error_details.get('total_agents_in_workflow', 0)}
+- **Agents Executed**: {len(executed_agents)}
+- **Agents with Outputs**: {len(agent_outputs)}
+- **Success Rate**: {len(agent_outputs) / max(len(executed_agents), 1) * 100:.1f}%
+
+## 💾 Available Outputs
+You have the following partial results available:
+"""
+            
+            # List available outputs
+            for agent in executed_agents:
+                if agent in agent_outputs:
+                    safe_name = agent.lower().replace(' ', '_').replace('-', '_')
+                    file_pattern = f"*_{safe_name}.md"
+                    error_content += f"- **{agent}**: See `{file_pattern}`\n"
+            
+            error_content += f"""
+## 🔧 Troubleshooting
+- Check the failed agent configuration
+- Verify API quotas and connectivity
+- Review agent-specific logs above
+- Consider running from the last successful checkpoint
+
+## 🔄 Recovery Options
+1. **Partial Results**: Use the outputs from successful agents
+2. **Restart from Checkpoint**: Modify workflow to start from last successful agent
+3. **Debug Mode**: Run individual agents to isolate the issue
+
+---
+*Error report generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+            
+            with open(error_file, 'w', encoding='utf-8') as f:
+                f.write(error_content)
+            
+            logger.info(f"🚨 Error report saved: {error_file}")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to save error details: {e}")
 
     async def _save_results(self, result: Dict[str, Any]) -> None:
         """Save flexible workflow results to output directory in multiple formats."""
@@ -626,7 +957,7 @@ class FlexibleWorkflowManager:
             # Save comprehensive markdown report
             await self._save_markdown_report(result, output_dir, timestamp)
             
-            # Save individual agent outputs if available in state
+            # Save individual agent outputs if available in state (legacy support)
             await self._save_individual_outputs(result, output_dir, timestamp)
             
         except Exception as e:
@@ -648,6 +979,7 @@ class FlexibleWorkflowManager:
 - **Execution Time**: {metadata.get('execution_time', 0):.2f} seconds
 - **Timestamp**: {metadata.get('timestamp', 'N/A')}
 - **Workflow Type**: {metadata.get('workflow_type', 'N/A')}
+- **Incremental Outputs**: {metadata.get('incremental_output_dir', 'N/A')}
 
 ## 🎯 Original Request
 ```
@@ -670,6 +1002,23 @@ class FlexibleWorkflowManager:
             markdown_content += f"""
 ## 📝 Final Response
 {result.get('content', 'No response content available')}
+"""
+            
+            # Add incremental outputs information
+            incremental_dir = metadata.get('incremental_output_dir')
+            if incremental_dir:
+                markdown_content += f"""
+## 📁 Incremental Outputs
+Individual agent outputs have been saved to: `{incremental_dir}`
+
+Each agent's output is saved as a separate markdown file with execution order:
+- `00_workflow_metadata.md` - Initial workflow configuration
+- `01_[agent_name].md` - First agent output
+- `02_[agent_name].md` - Second agent output
+- `...` - Additional agent outputs in execution order
+- `99_final_summary.md` - Execution summary
+
+Note: Actual filenames will match the executed agents in your workflow.
 """
             
             # Add individual agent outputs if available
@@ -729,7 +1078,7 @@ class FlexibleWorkflowManager:
             logger.warning(f"⚠️ Failed to save markdown report: {e}")
 
     async def _save_individual_outputs(self, result: Dict[str, Any], output_dir: Path, timestamp: str) -> None:
-        """Save individual agent outputs as separate files if available."""
+        """Save individual agent outputs as separate files if available (legacy support)."""
         try:
             state = result.get("state", {})
             if not state:
@@ -875,7 +1224,7 @@ async def main() -> None:
         workflow_manager.print_configuration_summary()
         
         # Get example request
-        user_request = "Create a comprehensive LLM aided workflow platform for investment bankers"
+        user_request = "Create a comprehensive LLM guided Gartner style market research report generating framework"
         
         # Run the workflow
         result = await workflow_manager.run_workflow(user_request)
