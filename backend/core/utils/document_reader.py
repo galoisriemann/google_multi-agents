@@ -1,12 +1,13 @@
-"""Document Reader Utility for PDF and DOCX Files.
+"""Document Reader Utility for Multiple File Formats.
 
-This module provides functionality to read PDF and DOCX files and convert
-their content to markdown format for use in agent workflows.
+This module provides functionality to read PDF, DOCX, TXT, Markdown, CSV, and PPTX files
+and convert their content to markdown format for use in agent workflows.
 """
 
+import csv
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 try:
     import PyPDF2
@@ -18,6 +19,11 @@ try:
 except ImportError:
     Document = None
 
+try:
+    from pptx import Presentation
+except ImportError:
+    Presentation = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +33,16 @@ class DocumentReaderError(Exception):
 
 
 class DocumentReader:
-    """Reader class for PDF and DOCX documents with markdown output."""
+    """Reader class for multiple document formats with markdown output.
+    
+    Supported formats:
+    - PDF (.pdf)
+    - Microsoft Word (.docx)
+    - Plain Text (.txt)
+    - Markdown (.md)
+    - CSV (.csv)
+    - PowerPoint (.pptx)
+    """
     
     def __init__(self, input_directory: Optional[Path] = None):
         """Initialize the document reader.
@@ -74,7 +89,8 @@ class DocumentReader:
             return ""
         
         # Check if markdown version already exists
-        markdown_filename = file_path.stem + ".md"
+        # Use original filename with .md extension to avoid conflicts between different formats
+        markdown_filename = file_path.name + ".md"
         markdown_path = self.input_markdown_directory / markdown_filename
         
         if markdown_path.exists():
@@ -94,8 +110,17 @@ class DocumentReader:
                 content = self._read_pdf(file_path)
             elif extension == '.docx':
                 content = self._read_docx(file_path)
+            elif extension == '.txt':
+                content = self._read_txt(file_path)
+            elif extension == '.md':
+                content = self._read_markdown(file_path)
+            elif extension == '.csv':
+                content = self._read_csv(file_path)
+            elif extension == '.pptx':
+                content = self._read_pptx(file_path)
             else:
                 logger.warning(f"Unsupported file type: {extension}")
+                logger.info("Supported formats: .pdf, .docx, .txt, .md, .csv, .pptx")
                 return ""
             
             # Save markdown version to input_markdown directory
@@ -230,16 +255,287 @@ class DocumentReader:
         except Exception as e:
             raise DocumentReaderError(f"Failed to read DOCX {file_path.name}: {str(e)}") from e
     
+    def _read_txt(self, file_path: Path) -> str:
+        """Read TXT file and convert to markdown.
+        
+        Args:
+            file_path: Path to the TXT file
+            
+        Returns:
+            TXT content as markdown string
+            
+        Raises:
+            DocumentReaderError: If reading fails
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+            
+            content_parts = []
+            
+            # Add metadata header
+            content_parts.append(f"# Document: {file_path.name}\n")
+            content_parts.append(f"**Source**: Plain text file ({len(content)} characters)\n")
+            content_parts.append("---\n")
+            
+            # Add content with basic formatting
+            lines = content.split('\n')
+            content_parts.append("## Content\n")
+            
+            for line in lines:
+                line = line.strip()
+                if line:
+                    # Simple heuristic for headers (lines in all caps or with specific patterns)
+                    if line.isupper() and len(line) < 100:
+                        content_parts.append(f"### {line}\n")
+                    elif line.startswith('---') or line.startswith('==='):
+                        content_parts.append("---\n")
+                    else:
+                        content_parts.append(f"{line}\n")
+                else:
+                    content_parts.append("\n")
+            
+            result = "\n".join(content_parts)
+            logger.info(f"Successfully read TXT: {file_path.name} ({len(content)} characters)")
+            return result
+            
+        except UnicodeDecodeError:
+            # Try with different encoding
+            try:
+                with open(file_path, 'r', encoding='latin-1') as file:
+                    content = file.read()
+                logger.warning(f"Read TXT file with latin-1 encoding: {file_path.name}")
+                # Format with latin-1 content
+                content_parts = [
+                    f"# Document: {file_path.name}\n",
+                    f"**Source**: Plain text file ({len(content)} characters, latin-1 encoding)\n",
+                    "---\n",
+                    "## Content\n",
+                    content
+                ]
+                return "\n".join(content_parts)
+            except Exception as e:
+                raise DocumentReaderError(f"Failed to read TXT {file_path.name} with UTF-8 or latin-1: {str(e)}") from e
+        except Exception as e:
+            raise DocumentReaderError(f"Failed to read TXT {file_path.name}: {str(e)}") from e
+    
+    def _read_markdown(self, file_path: Path) -> str:
+        """Read Markdown file and return content.
+        
+        Args:
+            file_path: Path to the Markdown file
+            
+        Returns:
+            Markdown content with metadata header
+            
+        Raises:
+            DocumentReaderError: If reading fails
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as file:
+                content = file.read()
+            
+            content_parts = []
+            
+            # Add metadata header
+            content_parts.append(f"# Document: {file_path.name}\n")
+            content_parts.append(f"**Source**: Markdown file ({len(content)} characters)\n")
+            content_parts.append("---\n")
+            
+            # Add original markdown content
+            content_parts.append("## Original Content\n")
+            content_parts.append(content)
+            
+            result = "\n".join(content_parts)
+            logger.info(f"Successfully read Markdown: {file_path.name} ({len(content)} characters)")
+            return result
+            
+        except UnicodeDecodeError:
+            # Try with different encoding
+            try:
+                with open(file_path, 'r', encoding='latin-1') as file:
+                    content = file.read()
+                logger.warning(f"Read Markdown file with latin-1 encoding: {file_path.name}")
+                # Format with latin-1 content
+                content_parts = [
+                    f"# Document: {file_path.name}\n",
+                    f"**Source**: Markdown file ({len(content)} characters, latin-1 encoding)\n",
+                    "---\n",
+                    "## Original Content\n",
+                    content
+                ]
+                return "\n".join(content_parts)
+            except Exception as e:
+                raise DocumentReaderError(f"Failed to read Markdown {file_path.name} with UTF-8 or latin-1: {str(e)}") from e
+        except Exception as e:
+            raise DocumentReaderError(f"Failed to read Markdown {file_path.name}: {str(e)}") from e
+    
+    def _read_csv(self, file_path: Path) -> str:
+        """Read CSV file and convert to markdown table.
+        
+        Args:
+            file_path: Path to the CSV file
+            
+        Returns:
+            CSV content as markdown table
+            
+        Raises:
+            DocumentReaderError: If reading fails
+        """
+        try:
+            content_parts = []
+            
+            # Add metadata header
+            content_parts.append(f"# Document: {file_path.name}\n")
+            
+            with open(file_path, 'r', encoding='utf-8', newline='') as file:
+                # Detect delimiter
+                sample = file.read(1024)
+                file.seek(0)
+                sniffer = csv.Sniffer()
+                delimiter = sniffer.sniff(sample).delimiter
+                
+                reader = csv.reader(file, delimiter=delimiter)
+                rows = list(reader)
+            
+            if not rows:
+                content_parts.append("**Source**: Empty CSV file\n")
+                content_parts.append("---\n")
+                content_parts.append("*No data found in CSV file*\n")
+                result = "\n".join(content_parts)
+                logger.info(f"Successfully read empty CSV: {file_path.name}")
+                return result
+            
+            content_parts.append(f"**Source**: CSV file with {len(rows)} rows and {len(rows[0]) if rows else 0} columns\n")
+            content_parts.append("---\n")
+            
+            # Create markdown table
+            content_parts.append("## Data Table\n")
+            
+            # Header row
+            if rows:
+                header = rows[0]
+                content_parts.append("| " + " | ".join(str(cell).strip() for cell in header) + " |")
+                content_parts.append("| " + " | ".join("---" for _ in header) + " |")
+                
+                # Data rows
+                for row in rows[1:]:
+                    # Pad row to match header length
+                    padded_row = row + [""] * (len(header) - len(row))
+                    content_parts.append("| " + " | ".join(str(cell).strip() for cell in padded_row[:len(header)]) + " |")
+            
+            # Add summary statistics
+            content_parts.append(f"\n## Summary\n")
+            content_parts.append(f"- **Total Rows**: {len(rows)}")
+            content_parts.append(f"- **Total Columns**: {len(rows[0]) if rows else 0}")
+            content_parts.append(f"- **Data Rows**: {len(rows) - 1 if len(rows) > 1 else 0}")
+            
+            result = "\n".join(content_parts)
+            logger.info(f"Successfully read CSV: {file_path.name} ({len(rows)} rows)")
+            return result
+            
+        except UnicodeDecodeError:
+            # Try with different encoding
+            try:
+                with open(file_path, 'r', encoding='latin-1', newline='') as file:
+                    reader = csv.reader(file)
+                    rows = list(reader)
+                logger.warning(f"Read CSV file with latin-1 encoding: {file_path.name}")
+                # Format CSV content with latin-1 encoding
+                content_parts = [
+                    f"# Document: {file_path.name}\n",
+                    f"**Source**: CSV file with {len(rows)} rows (latin-1 encoding)\n",
+                    "---\n",
+                    "## Data Table\n"
+                ]
+                
+                if rows:
+                    header = rows[0]
+                    content_parts.append("| " + " | ".join(str(cell).strip() for cell in header) + " |")
+                    content_parts.append("| " + " | ".join("---" for _ in header) + " |")
+                    
+                    for row in rows[1:]:
+                        padded_row = row + [""] * (len(header) - len(row))
+                        content_parts.append("| " + " | ".join(str(cell).strip() for cell in padded_row[:len(header)]) + " |")
+                
+                return "\n".join(content_parts)
+            except Exception as e:
+                raise DocumentReaderError(f"Failed to read CSV {file_path.name} with UTF-8 or latin-1: {str(e)}") from e
+        except Exception as e:
+            raise DocumentReaderError(f"Failed to read CSV {file_path.name}: {str(e)}") from e
+    
+    def _read_pptx(self, file_path: Path) -> str:
+        """Read PPTX file and convert to markdown.
+        
+        Args:
+            file_path: Path to the PPTX file
+            
+        Returns:
+            PPTX content as markdown string
+            
+        Raises:
+            DocumentReaderError: If python-pptx is not installed or reading fails
+        """
+        if Presentation is None:
+            raise DocumentReaderError(
+                "python-pptx is not installed. Please install it with: pip install python-pptx"
+            )
+        
+        try:
+            prs = Presentation(file_path)
+            content_parts = []
+            
+            # Add metadata header
+            content_parts.append(f"# Document: {file_path.name}\n")
+            content_parts.append(f"**Source**: PowerPoint file with {len(prs.slides)} slides\n")
+            content_parts.append("---\n")
+            
+            # Extract content from each slide
+            for slide_num, slide in enumerate(prs.slides, 1):
+                content_parts.append(f"## Slide {slide_num}\n")
+                
+                # Extract text from all shapes in the slide
+                slide_text = []
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        text = shape.text.strip()
+                        # Simple heuristic for titles (usually shorter and on top)
+                        if len(text) < 100 and slide_text == []:
+                            slide_text.append(f"### {text}\n")
+                        else:
+                            slide_text.append(f"{text}\n")
+                
+                if slide_text:
+                    content_parts.extend(slide_text)
+                else:
+                    content_parts.append("*[No text content found on this slide]*\n")
+                
+                content_parts.append("\n")
+            
+            # Add summary
+            content_parts.append("## Presentation Summary\n")
+            content_parts.append(f"- **Total Slides**: {len(prs.slides)}")
+            
+            result = "\n".join(content_parts)
+            logger.info(f"Successfully read PPTX: {file_path.name} ({len(prs.slides)} slides)")
+            return result
+            
+        except Exception as e:
+            raise DocumentReaderError(f"Failed to read PPTX {file_path.name}: {str(e)}") from e
+    
     def list_available_documents(self) -> Dict[str, Dict[str, Any]]:
-        """List all available PDF and DOCX documents in the input directory.
+        """List all available documents in the input directory.
+        
+        Supports: PDF, DOCX, TXT, Markdown, CSV, and PPTX files.
         
         Returns:
             Dictionary with filename as key and file info as value
         """
         documents = {}
+        supported_extensions = ['.pdf', '.docx', '.txt', '.md', '.csv', '.pptx']
         
         for file_path in self.input_directory.iterdir():
-            if file_path.is_file() and file_path.suffix.lower() in ['.pdf', '.docx']:
+            if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
                 documents[file_path.name] = {
                     'path': str(file_path),
                     'type': file_path.suffix.lower(),
@@ -267,7 +563,8 @@ class DocumentReader:
             return False
         
         extension = file_path.suffix.lower()
-        return extension in ['.pdf', '.docx']
+        supported_extensions = ['.pdf', '.docx', '.txt', '.md', '.csv', '.pptx']
+        return extension in supported_extensions
 
 
 # Convenience functions for direct usage
