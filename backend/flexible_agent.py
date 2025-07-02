@@ -9,6 +9,7 @@ with configurable types, models, and prompts. Supports:
 """
 
 import asyncio
+import copy
 import logging
 import os
 import sys
@@ -193,12 +194,15 @@ FLEXIBLE_AGENT_CLASSES: Dict[str, Type[BaseAgent]] = {
 class FlexibleAgentFactory:
     """Factory for creating flexible agents from configuration."""
     
-    def __init__(self, configs: List[FlexibleAgentConfig], prompts_loader: ConfigLoader, input_directory: Optional[Path] = None):
+    def __init__(self, configs: List[FlexibleAgentConfig], prompts_loader: ConfigLoader, input_directory: Optional[Path] = None, incremental_dir: Optional[Path] = None):
         """Initialize the flexible agent factory."""
         self.configs = {c.name: c for c in configs}
         self.instances: Dict[str, BaseAgent] = {}
         self.prompts_loader = prompts_loader
         self.document_reader = DocumentReader(input_directory)
+        self.incremental_dir = incremental_dir
+        self.agent_execution_order = {}
+        self.saved_outputs = set()
 
     def _get_prompt(self, prompt_key: str, agent_config: FlexibleAgentConfig) -> str:
         """Get prompt from prompts configuration file and inject input file content if available."""
@@ -228,6 +232,109 @@ class FlexibleAgentFactory:
         except Exception as e:
             logger.error(f"Failed to load prompt '{prompt_key}': {e}")
             raise
+
+    def _create_after_model_callback(self, agent_name: str):
+        """Create an after_model callback for saving individual agent outputs.
+        
+        Uses after_model_callback (not after_agent_callback) to get immediate access
+        to the LLM response as soon as the model returns, enabling real-time saving
+        of individual agent outputs during workflow execution.
+        
+        Args:
+            agent_name: Name of the agent to create callback for
+            
+        Returns:
+            Callback function that accepts (callback_context, llm_response) parameters
+            and returns None to pass through the original response unchanged.
+        """
+        def after_model_callback(callback_context, llm_response):
+            """Callback to save agent output immediately after model responds."""
+            try:
+                if not self.incremental_dir or agent_name in self.saved_outputs:
+                    return None  # Don't modify response, just pass through
+                
+                # Get execution order
+                if agent_name not in self.agent_execution_order:
+                    self.agent_execution_order[agent_name] = len(self.agent_execution_order) + 1
+                
+                execution_order = self.agent_execution_order[agent_name]
+                
+                # Extract content from LLM response
+                content = ""
+                
+                if llm_response and llm_response.content and llm_response.content.parts:
+                    for part in llm_response.content.parts:
+                        if hasattr(part, 'text') and part.text:
+                            content += part.text
+                        elif hasattr(part, 'function_call'):
+                            # For function calls, we'll save a description
+                            func_call = part.function_call
+                            content += f"Function Call: {func_call.name}\nArguments: {func_call.args}\n"
+                elif llm_response and hasattr(llm_response, 'error_message') and llm_response.error_message:
+                    content = f"Error: {llm_response.error_message}"
+                
+                if content and len(content.strip()) > 0:
+                    # Save immediately using sync method in callback
+                    self._save_agent_output_sync(agent_name, content, execution_order)
+                    self.saved_outputs.add(agent_name)
+                    logger.info(f"🔄 Model callback saved output for agent: {agent_name} ({len(content)} chars)")
+                else:
+                    logger.warning(f"⚠️ No content found in model callback for agent: {agent_name}")
+                
+                # Return None to pass through original response unchanged
+                return None
+                
+            except Exception as e:
+                logger.error(f"Error in after_model_callback for {agent_name}: {e}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                return None  # Don't modify response on error
+        
+        return after_model_callback
+    
+    def _save_agent_output_sync(self, agent_name: str, content: str, execution_order: int):
+        """Synchronous method to save agent output from callback."""
+        try:
+            if not self.incremental_dir:
+                return
+                
+            filename = f"{execution_order:02d}_{agent_name.lower().replace(' ', '_')}.md"
+            file_path = self.incremental_dir / filename
+            
+            # Create markdown content
+            from datetime import datetime
+            markdown_content = f"""# {agent_name} Output
+**Agent**: {agent_name}
+**Execution Order**: {execution_order}
+**Timestamp**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+---
+
+{content}
+
+---
+*Saved by after_agent_callback on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*
+"""
+            
+            # Save to file
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(markdown_content)
+            
+            logger.info(f"💾 Saved agent output: {filename} ({len(content)} chars)")
+            
+        except Exception as e:
+            logger.error(f"Failed to save output for {agent_name}: {e}")
+    
+    def _get_agent_config_by_name(self, agent_name: str):
+        """Get agent configuration by name."""
+        try:
+            for config in self.configs.values():
+                if config.name == agent_name:
+                    return config
+            return None
+        except Exception as e:
+            logger.error(f"Error getting agent config for {agent_name}: {e}")
+            return None
 
     def build_all(self) -> Dict[str, BaseAgent]:
         """Build all flexible agents from configurations."""
@@ -290,6 +397,11 @@ class FlexibleAgentFactory:
                 if cfg.output_key:
                     kwargs["output_key"] = cfg.output_key
                     logger.debug(f"   Added output_key: {cfg.output_key}")
+                
+                # Add after_model callback for individual file saving
+                if self.incremental_dir:
+                    kwargs["after_model_callback"] = self._create_after_model_callback(cfg.name)
+                    logger.debug(f"   Added after_model_callback for incremental saving")
             
             # Add tools if specified
             if cfg.tools:
@@ -517,6 +629,35 @@ class FlexibleWorkflowManager:
         incremental_dir = output_dir / f"incremental_{timestamp}"
         incremental_dir.mkdir(parents=True, exist_ok=True)
         
+        # Rebuild agents with callback support for incremental saving
+        workflow_config = self._parse_workflow_config()
+        input_directory = self.base_dir / "input"
+        factory = FlexibleAgentFactory(workflow_config.agents, self.prompts_loader, input_directory, incremental_dir)
+        self.all_agents = factory.build_all()
+        
+        # Update main agent and runner with callback-enabled agents
+        if workflow_config.main_agent not in self.all_agents:
+            raise ValueError(f"Main flexible agent '{workflow_config.main_agent}' not found in agents")
+        
+        self.main_agent = self.all_agents[workflow_config.main_agent]
+        
+        # Recreate runner with callback-enabled agents
+        app_name = self.config_loader.get_value("app_config.app_name", "flexible_workflow")
+        self.runner = InMemoryRunner(
+            agent=self.main_agent,
+            app_name=app_name
+        )
+        
+        # Create new session for the new runner
+        user_id = self.config_loader.get_value("app_config.user_id", "flexible_user")
+        session_id = f"flexible_session_{timestamp}"
+        
+        self.session = await self.runner.session_service.create_session(
+            app_name=app_name,
+            user_id=user_id,
+            session_id=session_id
+        )
+        
         # Save initial workflow metadata
         await self._save_workflow_metadata(incremental_dir, user_request, start_time)
         
@@ -537,10 +678,9 @@ class FlexibleWorkflowManager:
             content = types.Content(role='user', parts=[types.Part(text=user_request)])
             
             # Execute the workflow
+            # Note: Individual agent outputs are now saved automatically via after_agent_callback
             response_text = ""
             final_state = {}
-            agent_execution_order = {}
-            last_saved_state = {}
 
             async for event in self.runner.run_async(
                 user_id=self.session.user_id,
@@ -552,7 +692,6 @@ class FlexibleWorkflowManager:
                     current_agent = event.agent_name
                     if current_agent not in executed_agents:
                         executed_agents.append(current_agent)
-                        agent_execution_order[current_agent] = len(executed_agents)
                         logger.info(f"🤖 Executing agent: {current_agent} (#{len(executed_agents)})")
                 
                 # Extract final response
@@ -561,55 +700,13 @@ class FlexibleWorkflowManager:
                         if part.text:
                             response_text += part.text
                 
-                # Extract state information and save immediately when outputs are available
+                # Extract state information for final summary
                 if hasattr(event, 'state') and event.state:
-                    for key, value in event.state.items():
-                        # Check if this is a new or updated output
-                        if (key not in last_saved_state or last_saved_state[key] != value) and value and isinstance(value, str) and len(value.strip()) > 0:
-                            # New or updated output detected - save immediately
-                            execution_order = agent_execution_order.get(key, len([a for a in executed_agents if a == key]) or len(executed_agents))
-                            await self._save_agent_output_incremental(
-                                incremental_dir, key, value, execution_order, agent_outputs
-                            )
-                            last_saved_state[key] = value
-                            logger.info(f"🔄 Real-time saved output for agent: {key}")
-                    
                     final_state.update(event.state)
-                
-                # Also check for agent completion events
-                if hasattr(event, 'content') and event.content and hasattr(event, 'author'):
-                    agent_name = event.author
-                    if agent_name and agent_name != 'user' and agent_name in executed_agents:
-                        # Check if this agent has an output in the current state
-                        if agent_name in final_state and agent_name not in agent_outputs:
-                            value = final_state[agent_name]
-                            if value and isinstance(value, str) and len(value.strip()) > 0:
-                                execution_order = agent_execution_order.get(agent_name, len(executed_agents))
-                                await self._save_agent_output_incremental(
-                                    incremental_dir, agent_name, value, execution_order, agent_outputs
-                                )
-                                logger.info(f"🏁 Agent completed and saved: {agent_name}")
-            
-            # Final cleanup: ensure any remaining outputs are saved
-            for agent_name in executed_agents:
-                if agent_name in final_state and agent_name not in agent_outputs:
-                    value = final_state[agent_name]
-                    if value and isinstance(value, str) and len(value.strip()) > 0:
-                        execution_order = agent_execution_order.get(agent_name, len(executed_agents))
-                        await self._save_agent_output_incremental(
-                            incremental_dir, agent_name, value, execution_order, agent_outputs
-                        )
-                        logger.info(f"🔚 Final cleanup saved: {agent_name}")
             
             # Get the final state from the session
             if not final_state and self.session:
                 final_state = getattr(self.session, 'state', {})
-                # Save any remaining outputs from session state
-                for key, value in final_state.items():
-                    if key not in agent_outputs and value:
-                        await self._save_agent_output_incremental(
-                            incremental_dir, key, value, len(executed_agents), agent_outputs
-                        )
             
             execution_time = (datetime.now() - start_time).total_seconds()
             
@@ -636,8 +733,13 @@ class FlexibleWorkflowManager:
             # Save final comprehensive results
             await self._save_results(result)
             
+            # Get outputs saved by callbacks
+            callback_outputs = {}
+            if hasattr(factory, 'saved_outputs'):
+                callback_outputs = {name: "Saved via callback" for name in factory.saved_outputs}
+            
             # Save final summary to incremental directory
-            await self._save_final_summary(incremental_dir, result, executed_agents, agent_outputs)
+            await self._save_final_summary(incremental_dir, result, executed_agents, callback_outputs)
             
             logger.info(f"✅ Flexible workflow completed successfully in {execution_time:.2f}s")
             logger.info(f"📁 Incremental outputs saved to: {incremental_dir}")
@@ -658,8 +760,13 @@ class FlexibleWorkflowManager:
             logger.error(f"   Executed Agents: {executed_agents}")
             logger.error(f"   Error Type: {error_details['error_type']}")
             
+            # Get outputs saved by callbacks for error report
+            callback_outputs = {}
+            if 'factory' in locals() and hasattr(factory, 'saved_outputs'):
+                callback_outputs = {name: "Saved via callback" for name in factory.saved_outputs}
+            
             # Save error details to incremental directory
-            await self._save_error_details(incremental_dir, error_details, executed_agents, agent_outputs)
+            await self._save_error_details(incremental_dir, error_details, executed_agents, callback_outputs)
             
             result = {
                 "status": WorkflowStatus.FAILED,
