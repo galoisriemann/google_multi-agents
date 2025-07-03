@@ -70,7 +70,8 @@ class FlexibleAgentConfig(BaseModel):
     description: Optional[str] = None
     instruction: Optional[str] = None
     prompt_key: Optional[str] = None  # Key to load prompt from prompts config
-    input_key: Optional[str] = None  # Filename of input document (PDF/DOCX) to inject as context
+    input_key: Optional[str] = None  # Filename of input document to inject as context
+    input_keys: Optional[List[str]] = None  # List of input document filenames to inject as context
     tools: List[str] = Field(default_factory=list)
     output_key: Optional[str] = None
     sub_agents: List[str] = Field(default_factory=list)
@@ -211,22 +212,47 @@ class FlexibleAgentFactory:
             if not prompt:
                 raise ValueError(f"Prompt '{prompt_key}' not found in prompts configuration")
             
-            # Inject input file content if specified
-            input_content = ""
-            if hasattr(agent_config, 'input_key') and agent_config.input_key:
-                try:
-                    input_content = self.document_reader.read_document(agent_config.input_key)
-                    if input_content:
-                        logger.info(f"Loaded input document '{agent_config.input_key}' for agent '{agent_config.name}'")
-                    else:
-                        logger.info(f"No input document found for '{agent_config.input_key}' - using empty content")
-                except DocumentReaderError as e:
-                    logger.warning(f"Failed to read input document '{agent_config.input_key}': {e}")
-                    input_content = ""
+            # Collect input documents from both single and multiple file specifications
+            input_files = []
             
-            # Inject input content into prompt if available
-            if input_content:
-                prompt = f"{prompt}\n\n**Additional Input Document:**\n{input_content}"
+            # Handle single input file (input_key)
+            if hasattr(agent_config, 'input_key') and agent_config.input_key:
+                input_files.append(agent_config.input_key)
+            
+            # Handle multiple input files (input_keys)
+            if hasattr(agent_config, 'input_keys') and agent_config.input_keys:
+                input_files.extend(agent_config.input_keys)
+            
+            # Process all input files
+            if input_files:
+                input_content_parts = []
+                successful_files = []
+                
+                for i, filename in enumerate(input_files, 1):
+                    try:
+                        file_content = self.document_reader.read_document(filename)
+                        if file_content:
+                            input_content_parts.append(f"### Document {i}: {filename}\n{file_content}")
+                            successful_files.append(filename)
+                            logger.info(f"Loaded input document '{filename}' for agent '{agent_config.name}'")
+                        else:
+                            logger.warning(f"No content found in document '{filename}' for agent '{agent_config.name}'")
+                    except DocumentReaderError as e:
+                        logger.warning(f"Failed to read input document '{filename}': {e}")
+                
+                # Inject all input content into prompt if any files were successfully loaded
+                if input_content_parts:
+                    if len(successful_files) == 1:
+                        # Single document format (backward compatibility)
+                        prompt = f"{prompt}\n\n**Additional Input Document:**\n{input_content_parts[0].split('\\n', 1)[1]}"
+                    else:
+                        # Multiple documents format
+                        combined_content = "\n\n".join(input_content_parts)
+                        prompt = f"{prompt}\n\n**Additional Input Documents ({len(successful_files)} files):**\n{combined_content}"
+                    
+                    logger.info(f"Injected {len(successful_files)} input documents into prompt for agent '{agent_config.name}'")
+                else:
+                    logger.warning(f"No input documents were successfully loaded for agent '{agent_config.name}'")
             
             return prompt
         except Exception as e:
@@ -523,9 +549,9 @@ class FlexibleWorkflowManager:
         try:
             # Convert steps to agents format for compatibility
             workflow_data = {
-                "name": self.config_loader.get_value("name", "Flexible Workflow"),
-                "description": self.config_loader.get_value("description", "A flexible multi-agent workflow"),
-                "version": self.config_loader.get_value("version", "1.0.0"),
+                "name": self.config_loader.get_value("name"),
+                "description": self.config_loader.get_value("description"),
+                "version": self.config_loader.get_value("version"),
                 "main_agent": "MainFlexibleOrchestrator",
                 "agents": []
             }
@@ -541,7 +567,7 @@ class FlexibleWorkflowManager:
                     agent_config = {
                         "name": step.get("name", f"FlexibleAgent_{len(agent_configs)}"),
                         "type": "LlmAgent",
-                        "model": step.get("model", self.config_loader.get_value("core_config.model", "gemini-1.5-flash")),
+                        "model": step.get("model", self.config_loader.get_value("core_config.model")),
                         "description": step.get("description", ""),
                         "prompt_key": step.get("prompt_key"),
                         "output_key": step.get("output_key"),
@@ -563,7 +589,7 @@ class FlexibleWorkflowManager:
             # If no steps, try to load agents directly (new format)
             elif "agents" in self.config:
                 workflow_data["agents"] = self.config["agents"]
-                workflow_data["main_agent"] = self.config.get("main_agent", "MainFlexibleOrchestrator")
+                workflow_data["main_agent"] = self.config.get("main_agent")
             
             return FlexibleWorkflowConfig(**workflow_data)
             
@@ -719,12 +745,12 @@ class FlexibleWorkflowManager:
                     "timestamp": start_time.isoformat(),
                     "original_request": user_request,
                     "workflow_type": "flexible",
-                    "workflow_name": self.config_loader.get_value("name", "Flexible Workflow"),
-                    "workflow_version": self.config_loader.get_value("version", "1.0.0"),
+                    "workflow_name": self.config_loader.get_value("name"),
+                    "workflow_version": self.config_loader.get_value("version"),
                     "agents_executed": executed_agents,
                     "main_agent": self.main_agent.name,
                     "total_agents": len(self.all_agents),
-                    "model_used": self.config_loader.get_value("core_config.model", "gemini-1.5-flash"),
+                    "model_used": self.config_loader.get_value("core_config.model"),
                     "incremental_output_dir": str(incremental_dir)
                 },
                 "state": final_state

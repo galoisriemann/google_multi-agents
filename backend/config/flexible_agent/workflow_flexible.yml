@@ -41,7 +41,11 @@ agents:
     description: "Analyzes user requirements and creates specifications"
     prompt_key: "requirement_analyzer"
     output_key: "analyzed_requirements"
-    input_key: null  # Optional: PDF with business requirements
+    input_keys: 
+      - "coding_standards.docx"
+      - "project_requirements.txt"
+      - "test.xlsx"
+      - "test_ppt.pptx"
     parameters:
       temperature: 0.0
       max_tokens: 2048
@@ -64,7 +68,7 @@ agents:
     description: "Generates code based on architecture and requirements"
     prompt_key: "code_generator"
     output_key: "generated_code"
-    input_key: "coding_standards.pdf"  # Optional: Coding standards and examples
+    input_key: null # Optional: Coding standards and examples
     parameters:
       temperature: 0.0
       max_tokens: 4096
@@ -205,4 +209,4 @@ metadata:
     - "fault-tolerant"
     - "code-generation"
     - "code-review"
-    - "documentation" 
+    - "documentation"

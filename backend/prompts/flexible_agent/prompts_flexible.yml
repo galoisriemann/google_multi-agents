@@ -90,7 +90,7 @@ prompts:
     - Maintainability features
     
     **Requirements Context:**
-    {analyzed_requirements}
+    {analyzed_requirements:No requirements analysis available yet. Please design based on the user request.}
     
     Create a detailed architectural design following the format above.
 
@@ -152,8 +152,8 @@ prompts:
     ```
     
     **Context from Previous Steps:**
-    Architecture: {system_architecture}
-    Requirements: {analyzed_requirements}
+    Architecture: {system_architecture:No architecture design available yet. Please design based on the requirements.}
+    Requirements: {analyzed_requirements:No requirements analysis available yet. Please code based on the user request.}
     
     Generate complete, production-ready code following the format above.
 
@@ -204,9 +204,9 @@ prompts:
     - Industry standard compliance
     
     **Context for Review:**
-    Code to Review: {generated_code}
-    System Architecture: {system_architecture}
-    Requirements: {analyzed_requirements}
+    Code to Review: {generated_code:No code has been generated yet. Please provide a general security analysis based on the architecture and requirements.}
+    System Architecture: {system_architecture:Not available}
+    Requirements: {analyzed_requirements:Not available}
     
     Provide a comprehensive security analysis following the format above.
 
@@ -261,9 +261,9 @@ prompts:
     - Monitoring and profiling recommendations
     
     **Context for Review:**
-    Code to Review: {generated_code}
-    System Architecture: {system_architecture}
-    Requirements: {analyzed_requirements}
+    Code to Review: {generated_code:No code has been generated yet. Please provide a general performance analysis based on the architecture and requirements.}
+    System Architecture: {system_architecture:Not available}
+    Requirements: {analyzed_requirements:Not available}
     
     Provide a detailed performance analysis following the format above.
 
@@ -321,9 +321,9 @@ prompts:
     - Refactoring suggestions
     
     **Context for Review:**
-    Code to Review: {generated_code}
-    System Architecture: {system_architecture}
-    Requirements: {analyzed_requirements}
+    Code to Review: {generated_code:No code has been generated yet. Please provide a general code quality analysis based on the architecture and requirements.}
+    System Architecture: {system_architecture:Not available}
+    Requirements: {analyzed_requirements:Not available}
     
     Provide a thorough code quality analysis following the format above.
 
@@ -381,12 +381,12 @@ prompts:
     - Breaking changes (if any)
     
     **Context and Review Inputs:**
-    Original Code: {generated_code}
-    System Architecture: {system_architecture}
-    Requirements: {analyzed_requirements}
-    Security Review: {security_review}
-    Performance Review: {performance_review}
-    Quality Review: {quality_review}
+    Original Code: {generated_code:No code has been generated yet. Please create a new implementation based on the architecture and requirements.}
+    System Architecture: {system_architecture:Not available}
+    Requirements: {analyzed_requirements:Not available}
+    Security Review: {security_review:No security review available yet}
+    Performance Review: {performance_review:No performance review available yet}
+    Quality Review: {quality_review:No quality review available yet}
     
     Provide refactored code that addresses all identified issues.
 
@@ -481,12 +481,12 @@ prompts:
     ```
     
     **Complete Context for Documentation:**
-    Final Code: {refactored_code}
-    System Architecture: {system_architecture}
-    Requirements: {analyzed_requirements}
-    Security Review Summary: {security_review}
-    Performance Review Summary: {performance_review}
-    Quality Review Summary: {quality_review}
+    Final Code: {refactored_code:No refactored code available yet. Please document based on the architecture and requirements.}
+    System Architecture: {system_architecture:Not available}
+    Requirements: {analyzed_requirements:Not available}
+    Security Review Summary: {security_review:No security review available yet}
+    Performance Review Summary: {performance_review:No performance review available yet}
+    Quality Review Summary: {quality_review:No quality review available yet}
     
     Create comprehensive documentation following the format above.
 

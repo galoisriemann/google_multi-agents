@@ -24,6 +24,11 @@ try:
 except ImportError:
     Presentation = None
 
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,6 +46,7 @@ class DocumentReader:
     - Plain Text (.txt)
     - Markdown (.md)
     - CSV (.csv)
+    - Microsoft Excel (.xlsx)
     - PowerPoint (.pptx)
     """
     
@@ -116,11 +122,13 @@ class DocumentReader:
                 content = self._read_markdown(file_path)
             elif extension == '.csv':
                 content = self._read_csv(file_path)
+            elif extension == '.xlsx':
+                content = self._read_xlsx(file_path)
             elif extension == '.pptx':
                 content = self._read_pptx(file_path)
             else:
                 logger.warning(f"Unsupported file type: {extension}")
-                logger.info("Supported formats: .pdf, .docx, .txt, .md, .csv, .pptx")
+                logger.info("Supported formats: .pdf, .docx, .txt, .md, .csv, .xlsx, .pptx")
                 return ""
             
             # Save markdown version to input_markdown directory
@@ -133,6 +141,39 @@ class DocumentReader:
             error_msg = f"Error reading document {filename}: {str(e)}"
             logger.error(error_msg)
             raise DocumentReaderError(error_msg) from e
+    
+    def read_multiple_documents(self, filenames: List[str]) -> Dict[str, str]:
+        """Read multiple documents and return their content as a dictionary.
+        
+        Args:
+            filenames: List of filenames to read
+            
+        Returns:
+            Dictionary mapping filename to content. Failed reads return empty string.
+        """
+        results = {}
+        
+        if not filenames:
+            return results
+        
+        logger.info(f"Reading {len(filenames)} documents: {filenames}")
+        
+        for filename in filenames:
+            try:
+                content = self.read_document(filename)
+                results[filename] = content
+                if content:
+                    logger.debug(f"Successfully read {filename}: {len(content)} characters")
+                else:
+                    logger.warning(f"No content returned for {filename}")
+            except Exception as e:
+                logger.error(f"Failed to read {filename}: {e}")
+                results[filename] = ""
+        
+        successful_reads = sum(1 for content in results.values() if content)
+        logger.info(f"Successfully read {successful_reads}/{len(filenames)} documents")
+        
+        return results
     
     def _save_markdown_version(self, content: str, markdown_path: Path, original_filename: str) -> None:
         """Save markdown version of the document to input_markdown directory.
@@ -464,6 +505,117 @@ class DocumentReader:
         except Exception as e:
             raise DocumentReaderError(f"Failed to read CSV {file_path.name}: {str(e)}") from e
     
+    def _read_xlsx(self, file_path: Path) -> str:
+        """Read XLSX file and convert to markdown.
+        
+        Args:
+            file_path: Path to the XLSX file
+            
+        Returns:
+            XLSX content as markdown string with all sheets
+            
+        Raises:
+            DocumentReaderError: If pandas is not installed or reading fails
+        """
+        if pd is None:
+            raise DocumentReaderError(
+                "pandas is not installed. Please install it with: pip install pandas openpyxl"
+            )
+        
+        try:
+            # Read all sheets from the Excel file
+            all_sheets = pd.read_excel(file_path, sheet_name=None, engine='openpyxl')
+            content_parts = []
+            
+            # Add metadata header
+            content_parts.append(f"# Document: {file_path.name}\n")
+            content_parts.append(f"**Source**: Excel file with {len(all_sheets)} sheet(s)\n")
+            content_parts.append("---\n")
+            
+            # Process each sheet
+            total_rows = 0
+            total_cols = 0
+            
+            for sheet_name, df in all_sheets.items():
+                content_parts.append(f"## Sheet: {sheet_name}\n")
+                
+                if df.empty:
+                    content_parts.append("*[This sheet is empty]*\n\n")
+                    continue
+                
+                # Clean the dataframe - replace NaN with empty strings
+                df_clean = df.fillna('')
+                
+                # Add basic statistics
+                rows, cols = df_clean.shape
+                total_rows += rows
+                total_cols = max(total_cols, cols)
+                
+                content_parts.append(f"**Dimensions**: {rows} rows × {cols} columns\n")
+                
+                # Convert to markdown table
+                content_parts.append("\n### Data Table\n")
+                
+                # Create header row
+                headers = [str(col) for col in df_clean.columns]
+                content_parts.append("| " + " | ".join(headers) + " |")
+                content_parts.append("| " + " | ".join("---" for _ in headers) + " |")
+                
+                # Add data rows (limit to first 100 rows for readability)
+                max_rows = min(100, len(df_clean))
+                if max_rows < len(df_clean):
+                    content_parts.append(f"*[Showing first {max_rows} of {len(df_clean)} rows]*\n")
+                
+                for idx in range(max_rows):
+                    row_data = []
+                    for col in df_clean.columns:
+                        cell_value = str(df_clean.iloc[idx][col]).strip()
+                        # Escape pipe characters in cell content
+                        cell_value = cell_value.replace('|', '\\|').replace('\n', ' ')
+                        row_data.append(cell_value if cell_value else " ")
+                    content_parts.append("| " + " | ".join(row_data) + " |")
+                
+                # Add sheet summary
+                content_parts.append(f"\n### Sheet Summary\n")
+                content_parts.append(f"- **Total Rows**: {len(df_clean)}")
+                content_parts.append(f"- **Total Columns**: {len(df_clean.columns)}")
+                
+                # Data type information
+                if not df_clean.empty:
+                    content_parts.append(f"- **Column Types**:")
+                    for col in df_clean.columns:
+                        dtype = str(df_clean[col].dtype)
+                        non_empty_count = df_clean[col].astype(str).str.strip().str.len().gt(0).sum()
+                        content_parts.append(f"  - `{col}`: {dtype} ({non_empty_count} non-empty values)")
+                
+                # Basic statistics for numeric columns
+                numeric_cols = df_clean.select_dtypes(include=['number']).columns
+                if len(numeric_cols) > 0:
+                    content_parts.append(f"- **Numeric Column Statistics**:")
+                    for col in numeric_cols:
+                        series = pd.to_numeric(df_clean[col], errors='coerce')
+                        if not series.isna().all():
+                            mean_val = series.mean()
+                            min_val = series.min()
+                            max_val = series.max()
+                            content_parts.append(f"  - `{col}`: min={min_val:.2f}, max={max_val:.2f}, mean={mean_val:.2f}")
+                
+                content_parts.append("\n")
+            
+            # Add overall file summary
+            content_parts.append("## File Summary\n")
+            content_parts.append(f"- **Total Sheets**: {len(all_sheets)}")
+            content_parts.append(f"- **Total Data Rows**: {total_rows}")
+            content_parts.append(f"- **Max Columns**: {total_cols}")
+            content_parts.append(f"- **Sheet Names**: {', '.join(all_sheets.keys())}")
+            
+            result = "\n".join(content_parts)
+            logger.info(f"Successfully read XLSX: {file_path.name} ({len(all_sheets)} sheets, {total_rows} total rows)")
+            return result
+            
+        except Exception as e:
+            raise DocumentReaderError(f"Failed to read XLSX {file_path.name}: {str(e)}") from e
+    
     def _read_pptx(self, file_path: Path) -> str:
         """Read PPTX file and convert to markdown.
         
@@ -526,13 +678,13 @@ class DocumentReader:
     def list_available_documents(self) -> Dict[str, Dict[str, Any]]:
         """List all available documents in the input directory.
         
-        Supports: PDF, DOCX, TXT, Markdown, CSV, and PPTX files.
+        Supports: PDF, DOCX, TXT, Markdown, CSV, XLSX, and PPTX files.
         
         Returns:
             Dictionary with filename as key and file info as value
         """
         documents = {}
-        supported_extensions = ['.pdf', '.docx', '.txt', '.md', '.csv', '.pptx']
+        supported_extensions = ['.pdf', '.docx', '.txt', '.md', '.csv', '.xlsx', '.pptx']
         
         for file_path in self.input_directory.iterdir():
             if file_path.is_file() and file_path.suffix.lower() in supported_extensions:
@@ -563,7 +715,7 @@ class DocumentReader:
             return False
         
         extension = file_path.suffix.lower()
-        supported_extensions = ['.pdf', '.docx', '.txt', '.md', '.csv', '.pptx']
+        supported_extensions = ['.pdf', '.docx', '.txt', '.md', '.csv', '.xlsx', '.pptx']
         return extension in supported_extensions
 
 
