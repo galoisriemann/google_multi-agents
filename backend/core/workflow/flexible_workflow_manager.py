@@ -41,16 +41,18 @@ class FlexibleWorkflowManager:
     models, prompts, and execution strategies.
     """
     
-    def __init__(self, config_dir: Optional[Path] = None):
+    def __init__(self, config_dir: Optional[Path] = None, uploaded_configs: Optional[Dict[str, Dict[str, Any]]] = None):
         """Initialize the flexible workflow manager.
         
         Args:
             config_dir: Directory containing configuration files
+            uploaded_configs: Optional uploaded configurations to use instead of static files
         """
         self.base_dir = Path(__file__).parent.parent.parent
         self.config_dir = config_dir or (self.base_dir / "config" / "flexible_agent")
+        self.uploaded_configs = uploaded_configs or {}
         
-        # Load configuration files
+        # Load configuration files (prioritizing uploaded configs)
         self._load_configurations()
         
         # Set up API key
@@ -64,31 +66,92 @@ class FlexibleWorkflowManager:
         
         logger.info("FlexibleWorkflowManager initialized")
         
+    def update_configurations(self, uploaded_configs: Dict[str, Dict[str, Any]]) -> None:
+        """Update the workflow manager with new uploaded configurations.
+        
+        Args:
+            uploaded_configs: New uploaded configurations to use
+        """
+        logger.info(f"🔄 Updating configurations with: {list(uploaded_configs.keys())}")
+        self.uploaded_configs = uploaded_configs
+        
+        # Reload configurations with new uploads
+        self._load_configurations()
+        
+        # Reload API key with new gemini config
+        self._load_api_key()
+        
+        # Reset agents - they will be rebuilt on next workflow run
+        self.main_agent = None
+        self.all_agents = {}
+        self.runner = None
+        self.session = None
+        
+        logger.info("✅ Configurations updated successfully")
+        
     def _load_configurations(self) -> None:
-        """Load all configuration files.
+        """Load all configuration files, prioritizing uploaded configs over static files.
         
         Raises:
             Exception: If configuration loading fails
         """
         try:
+            import yaml
+            
             # Main workflow configuration
-            workflow_config_path = self.config_dir / "workflow_flexible.yml"
-            self.config_loader = ConfigLoader(workflow_config_path)
+            if "workflow" in self.uploaded_configs and self.uploaded_configs["workflow"].get("is_valid", True):
+                logger.info("🔄 Using uploaded workflow configuration")
+                config_content = self.uploaded_configs["workflow"]["content"]
+                self.config = yaml.safe_load(config_content)
+                # Create a dummy config loader for API compatibility
+                workflow_config_path = self.config_dir / "workflow_flexible.yml"
+                self.config_loader = ConfigLoader(workflow_config_path)
+                self.config_loader.config = self.config  # Override with uploaded config
+            else:
+                logger.info("📁 Using static workflow configuration file")
+                workflow_config_path = self.config_dir / "workflow_flexible.yml"
+                self.config_loader = ConfigLoader(workflow_config_path)
+                self.config = self.config_loader.load_config()
             
             # Gemini configuration
-            gemini_config_path = self.config_dir / "gemini_config_flexible.yml"
-            self.gemini_config_loader = ConfigLoader(gemini_config_path)
+            if "gemini" in self.uploaded_configs and self.uploaded_configs["gemini"].get("is_valid", True):
+                logger.info("🔄 Using uploaded gemini configuration")
+                config_content = self.uploaded_configs["gemini"]["content"]
+                self.gemini_config = yaml.safe_load(config_content)
+                # Create a dummy config loader for API compatibility
+                gemini_config_path = self.config_dir / "gemini_config_flexible.yml"
+                self.gemini_config_loader = ConfigLoader(gemini_config_path)
+                self.gemini_config_loader.config = self.gemini_config  # Override with uploaded config
+            else:
+                logger.info("📁 Using static gemini configuration file")
+                gemini_config_path = self.config_dir / "gemini_config_flexible.yml"
+                self.gemini_config_loader = ConfigLoader(gemini_config_path)
+                self.gemini_config = self.gemini_config_loader.load_config()
             
             # Prompts configuration
-            prompts_config_path = self.base_dir / "prompts" / "flexible_agent" / "prompts_flexible.yml"
-            self.prompts_loader = ConfigLoader(prompts_config_path)
+            if "prompts" in self.uploaded_configs and self.uploaded_configs["prompts"].get("is_valid", True):
+                logger.info("🔄 Using uploaded prompts configuration")
+                config_content = self.uploaded_configs["prompts"]["content"]
+                self.prompts_config = yaml.safe_load(config_content)
+                # Create a dummy config loader for API compatibility
+                prompts_config_path = self.base_dir / "prompts" / "flexible_agent" / "prompts_flexible.yml"
+                self.prompts_loader = ConfigLoader(prompts_config_path)
+                self.prompts_loader.config = self.prompts_config  # Override with uploaded config
+            else:
+                logger.info("📁 Using static prompts configuration file")
+                prompts_config_path = self.base_dir / "prompts" / "flexible_agent" / "prompts_flexible.yml"
+                self.prompts_loader = ConfigLoader(prompts_config_path)
+                self.prompts_config = self.prompts_loader.load_config()
             
-            # Load configurations
-            self.config = self.config_loader.load_config()
-            self.gemini_config = self.gemini_config_loader.load_config()
-            self.prompts_config = self.prompts_loader.load_config()
+            config_sources = []
+            if "workflow" in self.uploaded_configs: config_sources.append("uploaded workflow")
+            if "gemini" in self.uploaded_configs: config_sources.append("uploaded gemini")
+            if "prompts" in self.uploaded_configs: config_sources.append("uploaded prompts")
             
-            logger.info("✅ All flexible agent configuration files loaded successfully")
+            if config_sources:
+                logger.info(f"✅ Configuration loaded using: {', '.join(config_sources)}")
+            else:
+                logger.info("✅ All static configuration files loaded successfully")
             
         except Exception as e:
             logger.error(f"Failed to load flexible agent configurations: {e}")
@@ -218,11 +281,12 @@ class FlexibleWorkflowManager:
             logger.error(f"Failed to initialize flexible workflow: {e}")
             raise
 
-    async def run_workflow(self, user_request: str) -> Dict[str, Any]:
+    async def run_workflow(self, user_request: str, status_callback=None) -> Dict[str, Any]:
         """Run the flexible workflow.
         
         Args:
             user_request: The user's request to process
+            status_callback: Optional callback function to report progress (agent_name, progress, message)
             
         Returns:
             Dictionary containing workflow results and metadata
@@ -236,10 +300,34 @@ class FlexibleWorkflowManager:
         incremental_dir = output_dir / f"incremental_{timestamp}"
         incremental_dir.mkdir(parents=True, exist_ok=True)
         
-        # Rebuild agents with callback support for incremental saving
+        # Rebuild agents with callback support for incremental saving and status updates
         workflow_config = self._parse_workflow_config()
         input_directory = self.base_dir / "input"
-        factory = FlexibleAgentFactory(workflow_config.agents, self.prompts_loader, input_directory, incremental_dir)
+        
+        # Create a wrapper callback that handles both saving and status updates
+        def progress_callback_wrapper(agent_name: str, content: str, execution_order: int):
+            """Wrapper callback that handles both saving and status reporting."""
+            logger.info(f"🔄 Agent completed: {agent_name} (#{execution_order})")
+            
+            # Track executed agents
+            if agent_name not in executed_agents:
+                executed_agents.append(agent_name)
+            
+            # Calculate progress based on execution order
+            total_agents = len(workflow_config.agents) - 1  # Exclude MainFlexibleOrchestrator
+            progress = 10.0 + (execution_order * 80.0 / max(total_agents, 1))
+            
+            # Report completion via status callback
+            if status_callback:
+                status_callback(agent_name, min(95.0, progress), f"Completed {agent_name}")
+        
+        factory = FlexibleAgentFactory(
+            workflow_config.agents, 
+            self.prompts_loader, 
+            input_directory, 
+            incremental_dir,
+            progress_callback=progress_callback_wrapper
+        )
         self.all_agents = factory.build_all()
         
         # Update main agent and runner with callback-enabled agents
@@ -281,6 +369,10 @@ class FlexibleWorkflowManager:
             # Log all agent configurations for debugging
             self._log_agent_configurations()
             
+            # Report initialization complete
+            if status_callback:
+                status_callback("Initialization", 5.0, "Workflow initialized successfully")
+            
             # Create user message
             content = types.Content(role='user', parts=[types.Part(text=user_request)])
             
@@ -293,13 +385,6 @@ class FlexibleWorkflowManager:
                 session_id=self.session.id,
                 new_message=content
             ):
-                # Track which agent is currently executing
-                if hasattr(event, 'agent_name') and event.agent_name:
-                    current_agent = event.agent_name
-                    if current_agent not in executed_agents:
-                        executed_agents.append(current_agent)
-                        logger.info(f"🤖 Executing agent: {current_agent} (#{len(executed_agents)})")
-                
                 # Extract final response
                 if event.is_final_response() and event.content and event.content.parts:
                     for part in event.content.parts:
@@ -346,6 +431,10 @@ class FlexibleWorkflowManager:
             
             # Save final summary to incremental directory
             await self._save_final_summary(incremental_dir, result, executed_agents, callback_outputs)
+            
+            # Report completion via callback
+            if status_callback:
+                status_callback("Completed", 100.0, f"Workflow completed successfully in {execution_time:.1f}s")
             
             logger.info(f"✅ Flexible workflow completed successfully in {execution_time:.2f}s")
             logger.info(f"📁 Incremental outputs saved to: {incremental_dir}")

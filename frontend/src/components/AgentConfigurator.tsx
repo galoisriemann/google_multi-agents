@@ -6,14 +6,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Thermometer, Timer, Repeat, Shield } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Settings, Thermometer, Timer, Repeat, Shield, Bot, Workflow, Tool } from "lucide-react";
+import { WorkflowConfig } from "@/lib/api";
 
 interface AgentConfiguratorProps {
   config: any;
   onConfigChange: (config: any) => void;
+  workflowConfig?: WorkflowConfig | null;
 }
 
-export const AgentConfigurator = ({ config, onConfigChange }: AgentConfiguratorProps) => {
+export const AgentConfigurator = ({ config, onConfigChange, workflowConfig }: AgentConfiguratorProps) => {
   const updateConfig = (key: string, value: any) => {
     onConfigChange({ ...config, [key]: value });
   };
@@ -21,9 +24,100 @@ export const AgentConfigurator = ({ config, onConfigChange }: AgentConfiguratorP
   return (
     <div className="space-y-6">
       <div>
-        <Label className="text-lg font-semibold">Agent Configuration</Label>
-        <p className="text-sm text-gray-600 mt-1">Fine-tune your agent's behavior and performance parameters</p>
+        <Label className="text-lg font-semibold">Workflow Configuration</Label>
+        <p className="text-sm text-gray-600 mt-1">
+          {workflowConfig ?
+            `Review the ${workflowConfig.name} workflow configuration and adjust parameters` :
+            "Loading workflow configuration..."
+          }
+        </p>
       </div>
+
+      {/* Workflow Overview */}
+      {workflowConfig && (
+        <Card className="p-4 space-y-4">
+          <div className="flex items-center space-x-2">
+            <Workflow className="w-5 h-5 text-indigo-500" />
+            <h3 className="font-semibold">Workflow Overview</h3>
+          </div>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <Label className="text-sm font-medium">Workflow Name</Label>
+              <p className="text-sm text-gray-700">{workflowConfig.name}</p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Version</Label>
+              <p className="text-sm text-gray-700">{workflowConfig.version}</p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Main Agent</Label>
+              <p className="text-sm text-gray-700">{workflowConfig.main_agent}</p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium">Total Agents</Label>
+              <p className="text-sm text-gray-700">{workflowConfig.agents.length}</p>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-sm font-medium">Description</Label>
+            <p className="text-sm text-gray-700 mt-1">{workflowConfig.description}</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Agents List */}
+      {workflowConfig && (
+        <Card className="p-4 space-y-4">
+          <div className="flex items-center space-x-2">
+            <Bot className="w-5 h-5 text-blue-500" />
+            <h3 className="font-semibold">Configured Agents ({workflowConfig.agents.length})</h3>
+          </div>
+
+          <ScrollArea className="h-48 w-full">
+            <div className="space-y-2">
+              {workflowConfig.agents.map((agent, index) => (
+                <div key={agent.name} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="outline">{index + 1}</Badge>
+                    <div>
+                      <p className="font-medium text-sm">{agent.name}</p>
+                      <p className="text-xs text-gray-500">{agent.type}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {agent.model && (
+                      <Badge variant="secondary" className="text-xs">{agent.model}</Badge>
+                    )}
+                    {agent.tools.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">{agent.tools.length} tools</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </Card>
+      )}
+
+      {/* Available Tools */}
+      {workflowConfig && workflowConfig.available_tools.length > 0 && (
+        <Card className="p-4 space-y-4">
+          <div className="flex items-center space-x-2">
+            <Tool className="w-5 h-5 text-green-500" />
+            <h3 className="font-semibold">Available Tools ({workflowConfig.available_tools.length})</h3>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            {workflowConfig.available_tools.map((tool) => (
+              <Badge key={tool.name} variant="outline" className="justify-start">
+                {tool.name}
+              </Badge>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Model Parameters */}
@@ -32,7 +126,7 @@ export const AgentConfigurator = ({ config, onConfigChange }: AgentConfiguratorP
             <Thermometer className="w-5 h-5 text-blue-500" />
             <h3 className="font-semibold">Model Parameters</h3>
           </div>
-          
+
           <div className="space-y-4">
             <div>
               <div className="flex justify-between items-center mb-2">
@@ -90,7 +184,7 @@ export const AgentConfigurator = ({ config, onConfigChange }: AgentConfiguratorP
             <Settings className="w-5 h-5 text-purple-500" />
             <h3 className="font-semibold">Execution Settings</h3>
           </div>
-          
+
           <div className="space-y-4">
             <div>
               <Label htmlFor="timeout">Timeout (seconds)</Label>
@@ -142,7 +236,7 @@ export const AgentConfigurator = ({ config, onConfigChange }: AgentConfiguratorP
           <Shield className="w-5 h-5 text-green-500" />
           <h3 className="font-semibold">Advanced Options</h3>
         </div>
-        
+
         <div className="grid md:grid-cols-2 gap-4">
           <div className="flex items-center justify-between">
             <div>

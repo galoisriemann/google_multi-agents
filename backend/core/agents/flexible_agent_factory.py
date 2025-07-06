@@ -49,7 +49,8 @@ class FlexibleAgentFactory:
         configs: List[FlexibleAgentConfig], 
         prompts_loader: ConfigLoader, 
         input_directory: Optional[Path] = None, 
-        incremental_dir: Optional[Path] = None
+        incremental_dir: Optional[Path] = None,
+        progress_callback: Optional[callable] = None
     ):
         """Initialize the flexible agent factory.
         
@@ -58,12 +59,14 @@ class FlexibleAgentFactory:
             prompts_loader: Configuration loader for prompts
             input_directory: Directory containing input documents
             incremental_dir: Directory for saving incremental outputs
+            progress_callback: Optional callback function for progress updates (agent_name, content, execution_order)
         """
         self.configs = {c.name: c for c in configs}
         self.instances: Dict[str, BaseAgent] = {}
         self.prompts_loader = prompts_loader
         self.document_reader = DocumentReader(input_directory)
         self.incremental_dir = incremental_dir
+        self.progress_callback = progress_callback
         self.agent_execution_order = {}
         self.saved_outputs = set()
         
@@ -312,6 +315,13 @@ class FlexibleAgentFactory:
                     self._save_agent_output_sync(agent_name, content, execution_order)
                     self.saved_outputs.add(agent_name)
                     logger.info(f"🔄 Model callback saved output for agent: {agent_name} ({len(content)} chars)")
+                    
+                    # Call progress callback if available
+                    if self.progress_callback:
+                        try:
+                            self.progress_callback(agent_name, content, execution_order)
+                        except Exception as e:
+                            logger.error(f"Error in progress callback for {agent_name}: {e}")
                 else:
                     logger.warning(f"⚠️ No content found in model callback for agent: {agent_name}")
                 

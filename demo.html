@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workflow Automation Platform - Demo & Debug</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+    <style>
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-running {
+            background-color: #3b82f6;
+            animation: pulse 1s infinite;
+        }
+
+        .status-completed {
+            background-color: #10b981;
+        }
+
+        .status-failed {
+            background-color: #ef4444;
+        }
+
+        .status-idle {
+            background-color: #6b7280;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .yaml-editor {
+            font-family: 'Courier New', monospace;
+            tab-size: 2;
+        }
+
+        .validation-error {
+            border-left: 4px solid #ef4444;
+            background-color: #fef2f2;
+        }
+
+        .validation-warning {
+            border-left: 4px solid #f59e0b;
+            background-color: #fffbeb;
+        }
+
+        .validation-success {
+            border-left: 4px solid #10b981;
+            background-color: #f0fdf4;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <!-- Header -->
+        <div class="bg-white rounded-lg shadow-sm p-6 mb-8">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-3xl font-bold text-gray-900 mb-2">🚀 Workflow Automation Platform</h1>
+                    <p class="text-gray-600">Demo & Debug Interface - Test YAML validation and workflow execution</p>
+                </div>
+                <div id="system-status" class="flex items-center space-x-4">
+                    <div class="text-center">
+                        <div class="text-sm text-gray-600">Backend API</div>
+                        <div id="api-status" class="flex items-center">
+                            <span class="status-indicator status-idle"></span>
+                            <span class="text-sm font-medium">Checking...</span>
+                        </div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-sm text-gray-600">Active Workflows</div>
+                        <div id="workflow-count" class="text-lg font-bold text-blue-600">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="bg-white rounded-lg shadow-sm mb-8">
+            <div class="border-b border-gray-200">
+                <nav class="flex space-x-8 px-6">
+                    <button id="tab-yaml"
+                        class="tab-button active py-4 px-2 border-b-2 border-blue-500 text-blue-600 font-medium">
+                        YAML Configuration & Validation
+                    </button>
+                    <button id="tab-workflow"
+                        class="tab-button py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                        Workflow Execution & Testing
+                    </button>
+                    <button id="tab-api"
+                        class="tab-button py-4 px-2 border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                        API Testing & Debug
+                    </button>
+                </nav>
+            </div>
+
+            <!-- YAML Configuration Tab -->
+            <div id="content-yaml" class="tab-content p-6">
+                <h2 class="text-xl font-semibold mb-4">YAML Configuration Testing</h2>
+                <p class="text-gray-600 mb-6">Test YAML validation with comprehensive error checking and warnings</p>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Workflow Config -->
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-medium text-gray-900">Workflow Configuration</h3>
+                            <div id="workflow-validation" class="text-sm"></div>
+                        </div>
+                        <textarea id="workflow-yaml"
+                            class="yaml-editor w-full h-64 p-3 border border-gray-300 rounded-md text-sm"
+                            placeholder="Paste workflow YAML here...">name: "Flexible Agent Workflow - Load Balanced"
+description: "Advanced configurable workflow with load-balanced model distribution"
+version: "0.2"
+
+# Agent Configuration - main agent identifier
+agent_config:
+  name: "FlexiblePipelineAgent"
+  description: "Orchestrates flexible workflows with load-balanced model distribution"
+
+# API Configuration 
+api_config:
+  provider: "gemini"
+  model: "gemini-2.0-flash-exp"  # Using experimental model to avoid quota limits
+  temperature: 0.0
+  max_tokens: 4096
+  timeout: 60
+
+# Core Configuration (standardized across all agents)
+core_config:
+  model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+  temperature: 0.0
+  max_tokens: 4096
+  timeout: 60
+
+# App Configuration (standardized across all agents)
+app_config:
+  app_name: "flexible_agent_app"
+  user_id: "flexible_user"
+  session_id: "flexible_session"
+  output_dir: "backend/output"
+
+# Main agent orchestrating the workflow
+main_agent: "MainFlexibleOrchestrator"
+
+# Flexible workflow agents with LOAD-BALANCED model distribution
+agents:
+  # Individual LLM Agents - ALL USING SAME MODEL TO AVOID QUOTA LIMITS
+  - name: "RequirementAnalyzer"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Analyzes user requirements and creates specifications"
+    prompt_key: "requirement_analyzer"
+    output_key: "analyzed_requirements"
+    input_keys: 
+      - "coding_standards.docx"
+      - "project_requirements.txt"
+      - "test.xlsx"
+      - "test_ppt.pptx"
+    parameters:
+      temperature: 0.0
+      max_tokens: 2048
+    tools: ["text_analyzer"]
+
+  - name: "ArchitecturalDesigner"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Designs system architecture based on requirements"
+    prompt_key: "architectural_designer"
+    output_key: "system_architecture"
+    input_key: null  # Optional: Architecture standards document
+    parameters:
+      temperature: 0.0
+      max_tokens: 4096
+
+  - name: "CodeGenerator"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Generates code based on architecture and requirements"
+    prompt_key: "code_generator"
+    output_key: "generated_code"
+    input_key: null # Optional: Coding standards and examples
+    parameters:
+      temperature: 0.0
+      max_tokens: 4096
+    tools: ["code_formatter"]
+
+  # Parallel agents for code review - ALL USING SAME MODEL FOR CONSISTENCY
+  - name: "SecurityReviewer"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Reviews code for security vulnerabilities"
+    prompt_key: "security_reviewer"
+    output_key: "security_review"
+    input_key: null  # Optional: Security review checklist
+    parameters:
+      temperature: 0.0
+      max_tokens: 1024
+
+  - name: "PerformanceReviewer"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Reviews code for performance optimization"
+    prompt_key: "performance_reviewer"
+    output_key: "performance_review"
+    input_key: null  # Optional: Performance optimization guidelines
+    parameters:
+      temperature: 0.0
+      max_tokens: 1024
+
+  - name: "QualityReviewer"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Reviews code quality and best practices"
+    prompt_key: "quality_reviewer"
+    output_key: "quality_review"
+    input_key: null  # Optional: Quality review standards
+    parameters:
+      temperature: 0.0
+      max_tokens: 1024
+
+  # Parallel agent orchestrator
+  - name: "ParallelReviewOrchestrator"
+    type: "ParallelAgent"
+    model: "gemini-2.5-flash"  
+    description: "Orchestrates parallel code reviews using same model for consistency"
+    sub_agents: ["SecurityReviewer", "PerformanceReviewer", "QualityReviewer"]
+
+  # Code refactorer
+  - name: "CodeRefactorer"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Refactors code based on review feedback"
+    prompt_key: "code_refactorer"
+    output_key: "refactored_code"
+    input_key: null # Optional: Refactoring patterns and best practices
+    parameters:
+      temperature: 0.0
+      max_tokens: 4096
+    tools: ["code_formatter", "data_validator"]
+
+  # Documentation generator
+  - name: "DocumentationGenerator"
+    type: "LlmAgent"
+    model: "gemini-2.5-flash"  # Using experimental model to avoid quota limits
+    description: "Generates comprehensive documentation"
+    prompt_key: "documentation_generator"
+    output_key: "documentation"
+    input_key: null  # Optional: Documentation templates and standards
+    parameters:
+      temperature: 0.1
+      max_tokens: 4096
+    tools: ["text_processor"]
+
+  # Main orchestrator - runs everything sequentially
+  - name: "MainFlexibleOrchestrator"
+    type: "SequentialAgent"
+    description: "Main flexible workflow orchestrator with load balancing"
+    sub_agents: 
+      - "RequirementAnalyzer"
+      - "ArchitecturalDesigner"
+      - "CodeGenerator"
+      - "ParallelReviewOrchestrator"
+      - "CodeRefactorer"
+      - "DocumentationGenerator"
+
+# Model strategy explanation
+model_strategy:
+  gemini-2.5-flash:
+    agents: ["RequirementAnalyzer", "ArchitecturalDesigner", "CodeGenerator", "SecurityReviewer", "PerformanceReviewer", "QualityReviewer", "CodeRefactorer", "DocumentationGenerator"]
+    use_case: "All tasks using experimental model to avoid quota limits"
+    benefits:
+      - "Avoids quota exhaustion on 1.5-pro model"
+      - "Uses latest experimental features"
+      - "Simplified configuration with single model"
+      - "Consistent performance across all agents"
+    concurrent_capacity: "High - experimental model with potentially higher quotas"
+
+# Flexible-specific configuration
+flexible_config:
+  enable_parallel_processing: true
+  enable_loop_workflows: false
+  max_loop_iterations: 5
+  supported_agent_types:
+    - "LlmAgent"
+    - "SequentialAgent"
+    - "ParallelAgent"
+    - "LoopAgent"
+  languages:
+    - "python"
+    - "javascript"
+    - "typescript"
+    - "java"
+    - "go"
+  enable_linting: true
+  enable_testing: true
+  enable_documentation: true
+  code_style: "pythonic"
+  
+  # Model fallback settings
+  model_fallbacks:
+    enabled: true
+    retry_with_fallback_model: true
+    fallback_models:
+      gemini-2.0-flash-exp: ["gemini-1.5-flash", "gemini-2.0-flash"]
+      gemini-2.0-flash: ["gemini-1.5-flash"]
+      gemini-1.5-flash: ["gemini-1.0-pro"]
+
+metadata:
+  created_at: "2024-12-20"
+  author: "System"
+  agent_type: "flexible"
+  description: "Flexible workflow using gemini-2.0-flash-exp to avoid quota limits"
+  tags:
+    - "flexible-architecture"
+    - "multi-agent"
+    - "parallel-processing"
+    - "quota-optimized"
+    - "experimental-model"
+    - "fault-tolerant"
+    - "code-generation"
+    - "code-review"
+    - "documentation"</textarea>
+                        <div id="workflow-errors" class="validation-output"></div>
+                        <button onclick="validateWorkflowYAML()"
+                            class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700">
+                            Validate Workflow YAML
+                        </button>
+                    </div>
+
+                    <!-- Gemini Config -->
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-medium text-gray-900">Gemini Configuration</h3>
+                            <div id="gemini-validation" class="text-sm"></div>
+                        </div>
+                        <textarea id="gemini-yaml"
+                            class="yaml-editor w-full h-64 p-3 border border-gray-300 rounded-md text-sm"
+                            placeholder="Paste Gemini config YAML here..."># Gemini API Configuration for Flexible Agent Workflow
+# This file contains configuration for Google's Gemini API integration
+
+# API Configuration
+api_config:
+  provider: "gemini"
+  model: "gemini-2.0-flash"
+  
+  # API Key - Set your Google API key here
+  # You can also set this via environment variable: GOOGLE_API_KEY
+  api_key: "AIzaSyCs7T6qdSPA3r16W_q01fCzKZvn-5DAioI"
+  
+  # API endpoints
+  base_url: "https://generativelanguage.googleapis.com"
+  api_version: "v1beta"
+
+# Model Configuration
+model_config:
+  # Available models with their configurations
+  models:
+    gemini-1.5-pro:
+      max_tokens: 8192
+      supports_tools: true
+      supports_multimodal: true
+      cost_tier: "premium"
+      
+    gemini-1.5-flash:
+      max_tokens: 4096
+      supports_tools: true
+      supports_multimodal: true
+      cost_tier: "standard"
+      
+    gemini-1.0-pro:
+      max_tokens: 4096
+      supports_tools: false
+      supports_multimodal: false
+      cost_tier: "basic"
+
+# Performance Configuration
+performance_config:
+  # Request timeout in seconds
+  timeout_seconds: 120
+  
+  # Retry configuration
+  max_retries: 3
+  retry_delay: 1.0
+  backoff_factor: 2.0
+  
+  # Rate limiting
+  max_requests_per_minute: 60
+  max_tokens_per_minute: 32000
+  
+  # Connection pooling
+  max_connections: 10
+  keep_alive: true
+
+# Security Configuration
+security_config:
+  # Validate SSL certificates
+  verify_ssl: true
+  
+  # Content filtering
+  enable_safety_settings: true
+  
+  # Block categories (adjust as needed)
+  safety_settings:
+    HARM_CATEGORY_HARASSMENT: "BLOCK_MEDIUM_AND_ABOVE"
+    HARM_CATEGORY_HATE_SPEECH: "BLOCK_MEDIUM_AND_ABOVE"
+    HARM_CATEGORY_SEXUALLY_EXPLICIT: "BLOCK_MEDIUM_AND_ABOVE"
+    HARM_CATEGORY_DANGEROUS_CONTENT: "BLOCK_MEDIUM_AND_ABOVE"
+
+# Generation Configuration Defaults
+generation_config:
+  # Default temperature for flexible agent workflows
+  temperature: 0.0
+  
+  # Token limits
+  max_output_tokens: 4096
+  
+  # Sampling parameters
+  top_p: 0.95
+  top_k: 40
+  
+  # Stop sequences
+  stop_sequences: []
+  
+  # Candidate count
+  candidate_count: 1
+
+# Flexible Agent Specific Configuration
+flexible_agent_config:
+  # Model selection strategy for different agent types
+  agent_model_mapping:
+    RequirementAnalyzer: "gemini-2.0-flash"
+    ArchitecturalDesigner: "gemini-2.0-flash"
+    CodeGenerator: "gemini-2.0-flash"
+    SecurityReviewer: "gemini-2.0-flash"
+    PerformanceReviewer: "gemini-2.0-flash"
+    QualityReviewer: "gemini-2.0-flash"
+    CodeRefactorer: "gemini-2.0-flash"
+    DocumentationGenerator: "gemini-2.0-flash"
+    
+  # Temperature settings for different agent types
+  agent_temperature_mapping:
+    RequirementAnalyzer: 0.1
+    ArchitecturalDesigner: 0.0
+    CodeGenerator: 0.0
+    SecurityReviewer: 0.0
+    PerformanceReviewer: 0.0
+    QualityReviewer: 0.0
+    CodeRefactorer: 0.0
+    DocumentationGenerator: 0.1
+    
+  # Enable/disable features per agent type
+  agent_features:
+    parallel_processing: true
+    tool_calling: true
+    multimodal_input: false
+    streaming_response: false
+
+# Logging Configuration
+logging_config:
+  # Log level for API calls
+  log_level: "INFO"
+  
+  # Log API requests and responses
+  log_requests: true
+  log_responses: false  # Set to true for debugging (may contain sensitive data)
+  
+  # Log file location
+  log_file: "flexible_agent_api.log"
+  
+  # Log rotation
+  max_log_size_mb: 100
+  backup_count: 5
+
+# Development Configuration
+development_config:
+  # Enable debug mode
+  debug_mode: false
+  
+  # Mock API responses for testing
+  mock_responses: false
+  
+  # Validate configurations on startup
+  validate_config: true
+  
+  # Enable metrics collection
+  enable_metrics: true
+
+# Monitoring Configuration
+monitoring_config:
+  # Track API usage
+  track_usage: true
+  
+  # Usage limits and alerts
+  daily_token_limit: 1000000
+  alert_threshold: 0.8  # Alert when 80% of limit is reached
+  
+  # Performance monitoring
+  track_latency: true
+  track_errors: true
+  
+  # Health check configuration
+  health_check_interval: 300  # seconds
+  health_check_timeout: 30    # seconds
+
+metadata:
+  created_at: "2024-12-20"
+  version: "2.0.0"
+  description: "Gemini API configuration for flexible agent workflow system"
+  author: "System"</textarea>
+                        <div id="gemini-errors" class="validation-output"></div>
+                        <button onclick="validateGeminiYAML()"
+                            class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">
+                            Validate Gemini YAML
+                        </button>
+                    </div>
+
+                    <!-- Prompts Config -->
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-medium text-gray-900">Prompts Configuration</h3>
+                            <div id="prompts-validation" class="text-sm"></div>
+                        </div>
+                        <textarea id="prompts-yaml"
+                            class="yaml-editor w-full h-64 p-3 border border-gray-300 rounded-md text-sm"
+                            placeholder="Paste prompts YAML here...">prompts:
+  # Requirement Analyzer Agent
+  requirement_analyzer:
+    system: "You are a Senior Business Analyst and Requirements Engineer."
+    template: |
+      Your task is to analyze user requirements and create detailed, structured specifications.
+      
+      **Your responsibilities:**
+      1. Parse and understand user requirements thoroughly
+      2. Identify functional and non-functional requirements
+      3. Clarify ambiguities and ask relevant questions
+      4. Create structured requirement specifications
+      5. Identify potential risks and constraints
+      6. Suggest best practices and industry standards
+      
+      **Output Format:**
+      Please provide your analysis in the following structured format:
+      
+      ## Requirements Analysis
+      
+      ### Functional Requirements
+      - List all functional requirements clearly
+      
+      ### Non-Functional Requirements
+      - Performance requirements
+      - Security requirements
+      - Scalability requirements
+      - Usability requirements
+      
+      ### Technical Constraints
+      - Technology stack preferences
+      - Platform constraints
+      - Integration requirements
+      
+      ### Assumptions and Clarifications
+      - Any assumptions made
+      - Questions that need clarification
+      
+      ### Risk Assessment
+      - Potential technical risks
+      - Mitigation strategies
+      
+      Based on the user's request, provide a comprehensive analysis following the format above.
+
+  # Architectural Designer Agent
+  architectural_designer:
+    system: "You are a Senior Software Architect with expertise in designing scalable, maintainable systems."
+    template: |
+      Your task is to create a comprehensive system architecture based on the analyzed requirements.
+      
+      **Your responsibilities:**
+      1. Design overall system architecture
+      2. Select appropriate design patterns and architectural patterns
+      3. Define component interactions and interfaces
+      4. Consider scalability, performance, and maintainability
+      5. Choose appropriate technologies and frameworks
+      6. Create clear architectural documentation
+      
+      **Design Principles to Follow:**
+      - SOLID principles
+      - Clean Architecture
+      - Microservices where appropriate
+      - Domain-Driven Design
+      - Security by Design
+      - Performance optimization
+      
+      **Output Format:**
+      Please provide your architectural design in the following format:
+      
+      ## System Architecture Design
+      
+      ### High-Level Architecture
+      - Overall system design and components
+      - Architecture pattern (e.g., layered, microservices, event-driven)
+      
+      ### Component Design
+      - Core components and their responsibilities
+      - Component interfaces and contracts
+      - Data flow between components
+      
+      ### Technology Stack
+      - Programming languages and frameworks
+      - Databases and storage solutions
+      - Infrastructure and deployment considerations
+      
+      ### Design Patterns
+      - Architectural patterns used
+      - Design patterns for implementation
+      
+      ### Quality Attributes
+      - How the design addresses scalability
+      - Security considerations
+      - Performance optimizations
+      - Maintainability features
+      
+      **Requirements Context:**
+      {analyzed_requirements:No requirements analysis available yet. Please design based on the user request.}
+      
+      Create a detailed architectural design following the format above.
+
+  # Code Generator Agent
+  code_generator:
+    system: "You are an Expert Software Developer with mastery in multiple programming languages and frameworks."
+    template: |
+      Your task is to generate high-quality, production-ready code based on the architectural design and requirements.
+      
+      **Your responsibilities:**
+      1. Write clean, efficient, and maintainable code
+      2. Follow language-specific best practices and conventions
+      3. Implement proper error handling and logging
+      4. Include comprehensive type hints and documentation
+      5. Write unit tests for critical functionality
+      6. Ensure code follows SOLID principles
+      
+      **Code Quality Standards:**
+      - Use meaningful variable and function names
+      - Write self-documenting code with clear comments
+      - Follow PEP 8 for Python (or equivalent for other languages)
+      - Implement proper exception handling
+      - Include comprehensive docstrings (Google style)
+      - Use type hints throughout
+      - Write modular, reusable code
+      
+      **Output Format:**
+      Please provide your code implementation with the following structure:
+      
+      ## Code Implementation
+      
+      ### Project Structure
+      ```
+      project/
+      ├── src/
+      │   ├── __init__.py
+      │   ├── main.py
+      │   └── modules/
+      └── tests/
+          └── test_main.py
+      ```
+      
+      ### Main Implementation
+      ```python
+      # Main code with proper imports, type hints, and documentation
+      ```
+      
+      ### Supporting Modules
+      ```python
+      # Additional modules and utilities
+      ```
+      
+      ### Unit Tests
+      ```python
+      # Comprehensive unit tests
+      ```
+      
+      ### Installation and Usage Instructions
+      ```bash
+      # Setup and usage commands
+      ```
+      
+      **Context from Previous Steps:**
+      Architecture: {system_architecture:No architecture design available yet. Please design based on the requirements.}
+      Requirements: {analyzed_requirements:No requirements analysis available yet. Please code based on the user request.}
+      
+      Generate complete, production-ready code following the format above.
+
+  # Security Reviewer Agent
+  security_reviewer:
+    system: "You are a Cybersecurity Expert and Code Security Auditor."
+    template: |
+      Your task is to perform a comprehensive security review of the provided code.
+      
+      **Your responsibilities:**
+      1. Identify potential security vulnerabilities
+      2. Review input validation and sanitization
+      3. Check for proper authentication and authorization
+      4. Analyze data handling and storage security
+      5. Review error handling for information leakage
+      6. Check for secure coding practices
+      
+      **Security Areas to Review:**
+      - Input validation and injection attacks (SQL, XSS, etc.)
+      - Authentication and session management
+      - Authorization and access control
+      - Data encryption and storage
+      - Error handling and information disclosure
+      - Dependency and third-party library security
+      - Configuration and deployment security
+      
+      **Output Format:**
+      ## Security Review Report
+      
+      ### Security Score: [1-10]
+      
+      ### Critical Issues (High Priority)
+      - List any critical security vulnerabilities
+      
+      ### Medium Priority Issues
+      - Security improvements needed
+      
+      ### Low Priority Issues
+      - Minor security enhancements
+      
+      ### Security Best Practices Followed
+      - Positive security practices identified
+      
+      ### Recommendations
+      - Specific actionable recommendations
+      - Security tools and libraries to consider
+      
+      ### Compliance Notes
+      - OWASP Top 10 considerations
+      - Industry standard compliance
+      
+      **Context for Review:**
+      Code to Review: {generated_code:No code has been generated yet. Please provide a general security analysis based on the architecture and requirements.}
+      System Architecture: {system_architecture:Not available}
+      Requirements: {analyzed_requirements:Not available}
+      
+      Provide a comprehensive security analysis following the format above.
+
+  # Performance Reviewer Agent
+  performance_reviewer:
+    system: "You are a Performance Engineering Expert specializing in code optimization and system performance analysis."
+    template: |
+      Your task is to review code for performance bottlenecks and optimization opportunities.
+      
+      **Your responsibilities:**
+      1. Identify performance bottlenecks and inefficiencies
+      2. Analyze algorithmic complexity (Big O)
+      3. Review memory usage and potential leaks
+      4. Check for proper use of data structures
+      5. Identify opportunities for caching and optimization
+      6. Review database queries and I/O operations
+      
+      **Performance Areas to Analyze:**
+      - Algorithmic efficiency and complexity
+      - Memory usage and garbage collection
+      - I/O operations and database queries
+      - Concurrency and parallelization opportunities
+      - Caching strategies
+      - Network and API call efficiency
+      - Resource utilization
+      
+      **Output Format:**
+      ## Performance Review Report
+      
+      ### Performance Score: [1-10]
+      
+      ### Critical Performance Issues
+      - Major bottlenecks that need immediate attention
+      
+      ### Optimization Opportunities
+      - Areas where performance can be improved
+      
+      ### Algorithmic Analysis
+      - Time and space complexity analysis
+      - Suggestions for better algorithms/data structures
+      
+      ### Resource Utilization
+      - Memory usage patterns
+      - CPU utilization efficiency
+      - I/O operation efficiency
+      
+      ### Scalability Assessment
+      - How well the code will scale with increased load
+      - Horizontal and vertical scaling considerations
+      
+      ### Recommendations
+      - Specific performance improvement suggestions
+      - Tools and techniques for optimization
+      - Monitoring and profiling recommendations
+      
+      **Context for Review:**
+      Code to Review: {generated_code:No code has been generated yet. Please provide a general performance analysis based on the architecture and requirements.}
+      System Architecture: {system_architecture:Not available}
+      Requirements: {analyzed_requirements:Not available}
+      
+      Provide a detailed performance analysis following the format above.
+
+  # Quality Reviewer Agent
+  quality_reviewer:
+    system: "You are a Senior Code Quality Expert and Technical Lead."
+    template: |
+      Your task is to perform a comprehensive code quality review focusing on maintainability, readability, and best practices.
+      
+      **Your responsibilities:**
+      1. Review code structure and organization
+      2. Check adherence to coding standards and conventions
+      3. Evaluate code readability and maintainability
+      4. Review documentation and comments
+      5. Check for proper error handling
+      6. Assess test coverage and quality
+      
+      **Quality Areas to Review:**
+      - Code structure and modularity
+      - Naming conventions and clarity
+      - Documentation and comments
+      - Error handling and logging
+      - Test coverage and quality
+      - Adherence to SOLID principles
+      - Code duplication and reusability
+      
+      **Output Format:**
+      ## Code Quality Review Report
+      
+      ### Quality Score: [1-10]
+      
+      ### Strengths
+      - Well-implemented aspects of the code
+      
+      ### Areas for Improvement
+      - Code quality issues that need attention
+      
+      ### Code Structure
+      - Organization and modularity assessment
+      - Design pattern usage
+      
+      ### Documentation
+      - Quality of comments and docstrings
+      - README and inline documentation
+      
+      ### Testing
+      - Test coverage analysis
+      - Test quality and comprehensiveness
+      
+      ### Maintainability
+      - How easy is it to modify and extend the code
+      - Technical debt assessment
+      
+      ### Recommendations
+      - Specific improvements for better code quality
+      - Tools and practices to adopt
+      - Refactoring suggestions
+      
+      **Context for Review:**
+      Code to Review: {generated_code:No code has been generated yet. Please provide a general code quality analysis based on the architecture and requirements.}
+      System Architecture: {system_architecture:Not available}
+      Requirements: {analyzed_requirements:Not available}
+      
+      Provide a thorough code quality analysis following the format above.
+
+  # Code Refactorer Agent
+  code_refactorer:
+    system: "You are a Refactoring Expert and Clean Code Specialist."
+    template: |
+      Your task is to refactor code based on review feedback while maintaining functionality and improving quality, security, and performance.
+      
+      **Your responsibilities:**
+      1. Refactor code based on review feedback
+      2. Improve code structure and organization
+      3. Enhance security and performance
+      4. Maintain backward compatibility
+      5. Update tests and documentation
+      6. Follow clean code principles
+      
+      **Refactoring Principles:**
+      - Preserve existing functionality
+      - Improve code readability and maintainability
+      - Eliminate code smells and anti-patterns
+      - Enhance error handling and logging
+      - Optimize performance where identified
+      - Strengthen security measures
+      
+      **Output Format:**
+      ## Refactored Code Implementation
+      
+      ### Summary of Changes
+      - Overview of refactoring performed
+      - Key improvements made
+      
+      ### Refactored Code
+      ```python
+      # Complete refactored implementation
+      ```
+      
+      ### Security Improvements
+      - Security vulnerabilities addressed
+      - New security measures implemented
+      
+      ### Performance Optimizations
+      - Performance improvements made
+      - Optimization techniques applied
+      
+      ### Quality Enhancements
+      - Code quality improvements
+      - Better error handling and logging
+      
+      ### Updated Tests
+      ```python
+      # Updated and new unit tests
+      ```
+      
+      ### Migration Guide
+      - How to migrate from old to new implementation
+      - Breaking changes (if any)
+      
+      **Context and Review Inputs:**
+      Original Code: {generated_code:No code has been generated yet. Please create a new implementation based on the architecture and requirements.}
+      System Architecture: {system_architecture:Not available}
+      Requirements: {analyzed_requirements:Not available}
+      Security Review: {security_review:No security review available yet}
+      Performance Review: {performance_review:No performance review available yet}
+      Quality Review: {quality_review:No quality review available yet}
+      
+      Provide refactored code that addresses all identified issues.
+
+  # Documentation Generator Agent
+  documentation_generator:
+    system: "You are a Technical Writing Expert and Documentation Specialist."
+    template: |
+      Your task is to create comprehensive, user-friendly documentation for the developed software.
+      
+      **Your responsibilities:**
+      1. Create clear, comprehensive documentation
+      2. Write user guides and API documentation
+      3. Provide setup and installation instructions
+      4. Create code examples and tutorials
+      5. Document architecture and design decisions
+      6. Write troubleshooting guides
+      
+      **Documentation Standards:**
+      - Clear, concise, and well-structured
+      - Include practical examples
+      - Cover all major features and use cases
+      - Provide troubleshooting information
+      - Include diagrams where helpful
+      - Follow documentation best practices
+      
+      **Output Format:**
+      ## Complete Documentation Package
+      
+      ### README.md
+      ```markdown
+      # Project Title
+      
+      ## Overview
+      Brief description and features
+      
+      ## Installation
+      Step-by-step setup instructions
+      
+      ## Quick Start
+      Basic usage examples
+      
+      ## Features
+      Detailed feature descriptions
+      ```
+      
+      ### API Documentation
+      ```markdown
+      # API Reference
+      
+      ## Classes and Methods
+      Detailed API documentation
+      
+      ## Examples
+      Code examples for each major function
+      ```
+      
+      ### User Guide
+      ```markdown
+      # User Guide
+      
+      ## Getting Started
+      ## Advanced Usage
+      ## Best Practices
+      ## Troubleshooting
+      ```
+      
+      ### Developer Guide
+      ```markdown
+      # Developer Guide
+      
+      ## Architecture Overview
+      ## Contributing Guidelines
+      ## Testing Instructions
+      ## Deployment Guide
+      ```
+      
+      ### Quality and Security Notes
+      ```markdown
+      # Quality and Security Report
+      
+      ## Code Quality Summary
+      ## Security Assessment
+      ## Performance Characteristics
+      ## Known Limitations
+      ```
+      
+      ### Changelog
+      ```markdown
+      # Changelog
+      
+      ## Version History
+      ## Breaking Changes
+      ## Migration Guides
+      ```
+      
+      **Complete Context for Documentation:**
+      Final Code: {refactored_code:No refactored code available yet. Please document based on the architecture and requirements.}
+      System Architecture: {system_architecture:Not available}
+      Requirements: {analyzed_requirements:Not available}
+      Security Review Summary: {security_review:No security review available yet}
+      Performance Review Summary: {performance_review:No performance review available yet}
+      Quality Review Summary: {quality_review:No quality review available yet}
+      
+      Create comprehensive documentation following the format above.</textarea>
+                        <div id="prompts-errors" class="validation-output"></div>
+                        <button onclick="validatePromptsYAML()"
+                            class="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700">
+                            Validate Prompts YAML
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Comprehensive Validation -->
+                <div class="mt-8 p-4 bg-gray-50 rounded-lg">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-medium text-gray-900">Comprehensive Validation</h3>
+                        <button onclick="validateAllConfigs()"
+                            class="bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700">
+                            Validate All Configurations
+                        </button>
+                    </div>
+                    <div id="comprehensive-validation" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- Workflow Execution Tab -->
+            <div id="content-workflow" class="tab-content p-6 hidden">
+                <h2 class="text-xl font-semibold mb-4">Workflow Execution Testing</h2>
+
+                <!-- Workflow Execution Form -->
+                <div class="bg-gray-50 rounded-lg p-6 mb-6">
+                    <h3 class="font-medium text-gray-900 mb-4">Start New Workflow</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">User Request</label>
+                            <textarea id="user-request" class="w-full h-24 p-3 border border-gray-300 rounded-md"
+                                placeholder="Enter your workflow request here...">Create a comprehensive LLM guided Gartner style market research report generating framework</textarea>
+                        </div>
+                        <div class="flex space-x-4">
+                            <button onclick="startWorkflow()"
+                                class="bg-green-600 text-white py-2 px-6 rounded-md hover:bg-green-700">
+                                Start Workflow
+                            </button>
+                            <button onclick="refreshWorkflows()"
+                                class="bg-gray-600 text-white py-2 px-6 rounded-md hover:bg-gray-700">
+                                Refresh Status
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Workflows -->
+                <div>
+                    <h3 class="font-medium text-gray-900 mb-4">Active Workflows</h3>
+                    <div id="active-workflows" class="space-y-4">
+                        <div class="text-gray-500 text-center py-8">No active workflows</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Testing Tab -->
+            <div id="content-api" class="tab-content p-6 hidden">
+                <h2 class="text-xl font-semibold mb-4">API Endpoints Testing</h2>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <!-- API Status -->
+                    <div class="space-y-4">
+                        <h3 class="font-medium text-gray-900">System Status</h3>
+                        <div class="space-y-2">
+                            <button onclick="testHealthCheck()"
+                                class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700">
+                                Test Health Check
+                            </button>
+                            <button onclick="testWorkflowConfig()"
+                                class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">
+                                Test Workflow Config
+                            </button>
+                            <button onclick="testToolsList()"
+                                class="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700">
+                                Test Tools List
+                            </button>
+                        </div>
+                        <div id="api-test-results" class="bg-gray-50 rounded-lg p-4 max-h-64 overflow-auto">
+                            <div class="text-gray-500">API test results will appear here...</div>
+                        </div>
+                    </div>
+
+                    <!-- Configuration Upload -->
+                    <div class="space-y-4">
+                        <h3 class="font-medium text-gray-900">Configuration Upload Test</h3>
+                        <div class="space-y-2">
+                            <select id="config-type" class="w-full p-2 border border-gray-300 rounded-md">
+                                <option value="workflow">Workflow Config</option>
+                                <option value="gemini">Gemini Config</option>
+                                <option value="prompts">Prompts Config</option>
+                            </select>
+                            <input type="file" id="config-file" accept=".yml,.yaml"
+                                class="w-full p-2 border border-gray-300 rounded-md">
+                            <button onclick="uploadConfigFile()"
+                                class="w-full bg-orange-600 text-white py-2 px-4 rounded-md hover:bg-orange-700">
+                                Upload Configuration
+                            </button>
+                        </div>
+                        <div id="upload-results" class="bg-gray-50 rounded-lg p-4 max-h-64 overflow-auto">
+                            <div class="text-gray-500">Upload results will appear here...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+
+        // Tab management
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const tabName = button.id.replace('tab-', '');
+                showTab(tabName);
+            });
+        });
+
+        function showTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active', 'border-blue-500', 'text-blue-600');
+                btn.classList.add('border-transparent', 'text-gray-500');
+            });
+            document.getElementById(`tab-${tabName}`).classList.add('active', 'border-blue-500', 'text-blue-600');
+
+            // Update content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+        }
+
+        // YAML Validation Functions
+        function validateYAMLContent(content, configType) {
+            const errors = [];
+            const warnings = [];
+
+            try {
+                const data = jsyaml.load(content);
+
+                if (configType === 'workflow') {
+                    // Required fields
+                    const requiredFields = ['name', 'description', 'version', 'main_agent', 'agents'];
+                    requiredFields.forEach(field => {
+                        if (!(field in data)) {
+                            errors.push(`Missing required field: ${field}`);
+                        }
+                    });
+
+                    // Validate agents
+                    if (data.agents && Array.isArray(data.agents)) {
+                        const agentNames = [];
+                        const validAgentTypes = ['LlmAgent', 'SequentialAgent', 'ParallelAgent', 'LoopAgent'];
+
+                        data.agents.forEach((agent, index) => {
+                            if (typeof agent !== 'object') {
+                                errors.push(`Agent at index ${index} must be an object`);
+                                return;
+                            }
+
+                            ['name', 'type', 'description'].forEach(field => {
+                                if (!(field in agent)) {
+                                    errors.push(`Agent at index ${index} missing required field: ${field}`);
+                                }
+                            });
+
+                            if (agent.type && !validAgentTypes.includes(agent.type)) {
+                                errors.push(`Agent at index ${index} has invalid type: ${agent.type}`);
+                            }
+
+                            if (agent.name) {
+                                if (agentNames.includes(agent.name)) {
+                                    warnings.push(`Duplicate agent name: ${agent.name}`);
+                                }
+                                agentNames.push(agent.name);
+                            }
+                        });
+
+                        if (data.main_agent && !agentNames.includes(data.main_agent)) {
+                            errors.push(`Main agent '${data.main_agent}' not found in agents list`);
+                        }
+                    }
+                } else if (configType === 'gemini') {
+                    if (!data.api_config) {
+                        errors.push('Missing required field: api_config');
+                    } else {
+                        ['provider', 'model'].forEach(field => {
+                            if (!(field in data.api_config)) {
+                                errors.push(`Missing required field in api_config: ${field}`);
+                            }
+                        });
+
+                        if (data.api_config.provider && data.api_config.provider !== 'gemini') {
+                            warnings.push(`Provider is '${data.api_config.provider}', expected 'gemini'`);
+                        }
+                    }
+                } else if (configType === 'prompts') {
+                    const commonAgents = ['requirement_analyzer', 'architectural_designer', 'code_generator'];
+                    let hasPrompts = false;
+
+                    Object.keys(data).forEach(key => {
+                        if (typeof data[key] === 'object' && data[key] !== null) {
+                            hasPrompts = true;
+                            const prompt = data[key];
+
+                            if (!prompt.system && !prompt.template) {
+                                warnings.push(`Prompt '${key}' should have either 'system' or 'template' field`);
+                            }
+                        }
+                    });
+
+                    if (!hasPrompts) {
+                        warnings.push('No prompt configurations found');
+                    }
+
+                    commonAgents.forEach(agent => {
+                        if (!data[agent]) {
+                            warnings.push(`Missing prompt for common agent: ${agent}`);
+                        }
+                    });
+                }
+
+                return {
+                    isValid: errors.length === 0,
+                    errors,
+                    warnings
+                };
+            } catch (error) {
+                return {
+                    isValid: false,
+                    errors: [`YAML parsing error: ${error.message}`],
+                    warnings: []
+                };
+            }
+        }
+
+        function showValidationResult(elementId, result) {
+            const element = document.getElementById(elementId);
+            const validationElement = document.getElementById(elementId.replace('-errors', '-validation'));
+
+            element.innerHTML = '';
+
+            if (result.isValid && result.warnings.length === 0) {
+                element.className = 'validation-output validation-success p-3 rounded-md';
+                element.innerHTML = '<div class="text-green-700 font-medium">✅ Valid YAML configuration</div>';
+                validationElement.innerHTML = '<span class="text-green-600 font-medium">✅ Valid</span>';
+            } else {
+                let html = '';
+
+                if (result.errors.length > 0) {
+                    element.className = 'validation-output validation-error p-3 rounded-md';
+                    html += '<div class="text-red-700 font-medium mb-2">❌ Configuration Errors:</div>';
+                    html += '<ul class="text-red-600 text-sm space-y-1">';
+                    result.errors.forEach(error => {
+                        html += `<li>• ${error}</li>`;
+                    });
+                    html += '</ul>';
+                    validationElement.innerHTML = '<span class="text-red-600 font-medium">❌ Invalid</span>';
+                } else {
+                    element.className = 'validation-output validation-warning p-3 rounded-md';
+                    validationElement.innerHTML = '<span class="text-yellow-600 font-medium">⚠️ Warnings</span>';
+                }
+
+                if (result.warnings.length > 0) {
+                    if (result.errors.length > 0) html += '<div class="mt-3"></div>';
+                    html += '<div class="text-yellow-700 font-medium mb-2">⚠️ Configuration Warnings:</div>';
+                    html += '<ul class="text-yellow-600 text-sm space-y-1">';
+                    result.warnings.forEach(warning => {
+                        html += `<li>• ${warning}</li>`;
+                    });
+                    html += '</ul>';
+                }
+
+                element.innerHTML = html;
+            }
+        }
+
+        function validateWorkflowYAML() {
+            const content = document.getElementById('workflow-yaml').value;
+            const result = validateYAMLContent(content, 'workflow');
+            showValidationResult('workflow-errors', result);
+        }
+
+        function validateGeminiYAML() {
+            const content = document.getElementById('gemini-yaml').value;
+            const result = validateYAMLContent(content, 'gemini');
+            showValidationResult('gemini-errors', result);
+        }
+
+        function validatePromptsYAML() {
+            const content = document.getElementById('prompts-yaml').value;
+            const result = validateYAMLContent(content, 'prompts');
+            showValidationResult('prompts-errors', result);
+        }
+
+        function validateAllConfigs() {
+            const workflowResult = validateYAMLContent(document.getElementById('workflow-yaml').value, 'workflow');
+            const geminiResult = validateYAMLContent(document.getElementById('gemini-yaml').value, 'gemini');
+            const promptsResult = validateYAMLContent(document.getElementById('prompts-yaml').value, 'prompts');
+
+            const allValid = workflowResult.isValid && geminiResult.isValid && promptsResult.isValid;
+            const totalErrors = workflowResult.errors.length + geminiResult.errors.length + promptsResult.errors.length;
+            const totalWarnings = workflowResult.warnings.length + geminiResult.warnings.length + promptsResult.warnings.length;
+
+            let html = `
+                <div class="grid grid-cols-3 gap-4 mb-4">
+                    <div class="text-center p-3 ${workflowResult.isValid ? 'bg-green-100' : 'bg-red-100'} rounded">
+                        <div class="font-medium">Workflow</div>
+                        <div class="text-sm">${workflowResult.isValid ? '✅ Valid' : '❌ Invalid'}</div>
+                    </div>
+                    <div class="text-center p-3 ${geminiResult.isValid ? 'bg-green-100' : 'bg-red-100'} rounded">
+                        <div class="font-medium">Gemini</div>
+                        <div class="text-sm">${geminiResult.isValid ? '✅ Valid' : '❌ Invalid'}</div>
+                    </div>
+                    <div class="text-center p-3 ${promptsResult.isValid ? 'bg-green-100' : 'bg-red-100'} rounded">
+                        <div class="font-medium">Prompts</div>
+                        <div class="text-sm">${promptsResult.isValid ? '✅ Valid' : '❌ Invalid'}</div>
+                    </div>
+                </div>
+                <div class="text-center p-4 ${allValid ? 'bg-green-50' : 'bg-red-50'} rounded-lg">
+                    <div class="font-medium text-lg ${allValid ? 'text-green-700' : 'text-red-700'}">
+                        ${allValid ? '✅ All configurations are valid!' : '❌ Configuration validation failed'}
+                    </div>
+                    <div class="text-sm text-gray-600 mt-1">
+                        ${totalErrors} errors, ${totalWarnings} warnings
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('comprehensive-validation').innerHTML = html;
+        }
+
+        // API Testing Functions
+        async function testHealthCheck() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/health`);
+                const data = await response.json();
+                displayResult('api-test-results', 'Health Check', data, response.ok);
+                updateAPIStatus(response.ok);
+            } catch (error) {
+                displayResult('api-test-results', 'Health Check', { error: error.message }, false);
+                updateAPIStatus(false);
+            }
+        }
+
+        async function testWorkflowConfig() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/workflow/config`);
+                const data = await response.json();
+                displayResult('api-test-results', 'Workflow Config', data, response.ok);
+            } catch (error) {
+                displayResult('api-test-results', 'Workflow Config', { error: error.message }, false);
+            }
+        }
+
+        async function testToolsList() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/tools`);
+                const data = await response.json();
+                displayResult('api-test-results', 'Tools List', data, response.ok);
+            } catch (error) {
+                displayResult('api-test-results', 'Tools List', { error: error.message }, false);
+            }
+        }
+
+        function displayResult(elementId, title, data, success) {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const statusClass = success ? 'text-green-600' : 'text-red-600';
+            const statusIcon = success ? '✅' : '❌';
+
+            element.innerHTML = `
+                <div class="border-b border-gray-200 pb-2 mb-2">
+                    <div class="flex items-center justify-between">
+                        <span class="font-medium">${title}</span>
+                        <span class="text-xs text-gray-500">${timestamp}</span>
+                    </div>
+                    <span class="${statusClass}">${statusIcon} ${success ? 'Success' : 'Failed'}</span>
+                </div>
+                <pre class="text-xs bg-gray-100 p-2 rounded overflow-auto">${JSON.stringify(data, null, 2)}</pre>
+            `;
+        }
+
+        function updateAPIStatus(isHealthy) {
+            const statusElement = document.getElementById('api-status');
+            if (isHealthy) {
+                statusElement.innerHTML = '<span class="status-indicator status-completed"></span><span class="text-sm font-medium text-green-600">Healthy</span>';
+            } else {
+                statusElement.innerHTML = '<span class="status-indicator status-failed"></span><span class="text-sm font-medium text-red-600">Error</span>';
+            }
+        }
+
+        // Workflow Testing Functions
+        async function startWorkflow() {
+            const userRequest = document.getElementById('user-request').value.trim();
+
+            if (!userRequest) {
+                alert('Please enter a user request');
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/workflow/execute`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_request: userRequest
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    addWorkflowToList(data.id, userRequest);
+                    startPollingWorkflow(data.id);
+                } else {
+                    alert(`Failed to start workflow: ${data.detail || 'Unknown error'}`);
+                }
+            } catch (error) {
+                alert(`Failed to start workflow: ${error.message}`);
+            }
+        }
+
+        function addWorkflowToList(workflowId, request) {
+            const container = document.getElementById('active-workflows');
+
+            if (container.querySelector('.text-gray-500')) {
+                container.innerHTML = '';
+            }
+
+            const workflowElement = document.createElement('div');
+            workflowElement.id = `workflow-${workflowId}`;
+            workflowElement.className = 'bg-white border border-gray-200 rounded-lg p-4';
+            workflowElement.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <div class="font-medium text-gray-900">Workflow ${workflowId.substring(0, 8)}...</div>
+                    <div class="workflow-status">
+                        <span class="status-indicator status-running"></span>
+                        <span class="text-sm font-medium">Running</span>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-600 mb-2">${request}</div>
+                <div class="workflow-progress">
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1">0% complete</div>
+                </div>
+                <div class="workflow-result mt-4 hidden">
+                    <div class="text-sm font-medium text-gray-700 mb-2">Result:</div>
+                    <div class="text-sm bg-gray-50 p-3 rounded max-h-32 overflow-auto"></div>
+                </div>
+            `;
+
+            container.appendChild(workflowElement);
+        }
+
+        async function startPollingWorkflow(workflowId) {
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/api/v1/workflow/status/${workflowId}`);
+                    const status = await response.json();
+
+                    updateWorkflowStatus(workflowId, status);
+
+                    if (status.status === 'completed' || status.status === 'failed') {
+                        clearInterval(pollInterval);
+
+                        if (status.status === 'completed') {
+                            fetchWorkflowResult(workflowId);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error polling workflow status:', error);
+                    clearInterval(pollInterval);
+                }
+            }, 2000);
+        }
+
+        function updateWorkflowStatus(workflowId, status) {
+            const element = document.getElementById(`workflow-${workflowId}`);
+            if (!element) return;
+
+            const statusElement = element.querySelector('.workflow-status');
+            const progressElement = element.querySelector('.workflow-progress');
+
+            // Update status
+            let statusClass = 'status-running';
+            let statusText = 'Running';
+
+            if (status.status === 'completed') {
+                statusClass = 'status-completed';
+                statusText = 'Completed';
+            } else if (status.status === 'failed') {
+                statusClass = 'status-failed';
+                statusText = 'Failed';
+            }
+
+            statusElement.innerHTML = `
+                <span class="status-indicator ${statusClass}"></span>
+                <span class="text-sm font-medium">${statusText}</span>
+            `;
+
+            // Update progress
+            const progress = status.progress || 0;
+            progressElement.innerHTML = `
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: ${progress}%"></div>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">${Math.round(progress)}% complete</div>
+            `;
+        }
+
+        async function fetchWorkflowResult(workflowId) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/workflow/result/${workflowId}`);
+                const result = await response.json();
+
+                const element = document.getElementById(`workflow-${workflowId}`);
+                if (!element) return;
+
+                const resultElement = element.querySelector('.workflow-result');
+                const resultContent = resultElement.querySelector('div:last-child');
+
+                if (result.content) {
+                    resultContent.textContent = result.content.substring(0, 500) + (result.content.length > 500 ? '...' : '');
+                    resultElement.classList.remove('hidden');
+                } else {
+                    resultContent.textContent = 'No content available';
+                    resultElement.classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error fetching workflow result:', error);
+            }
+        }
+
+        async function refreshWorkflows() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/workflows`);
+                const data = await response.json();
+
+                document.getElementById('workflow-count').textContent = data.total || 0;
+            } catch (error) {
+                console.error('Error refreshing workflows:', error);
+            }
+        }
+
+        // Configuration Upload
+        async function uploadConfigFile() {
+            const configType = document.getElementById('config-type').value;
+            const fileInput = document.getElementById('config-file');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('Please select a file');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('config_type', configType);
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/config/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                displayResult('upload-results', `Upload ${configType}`, result, response.ok);
+            } catch (error) {
+                displayResult('upload-results', `Upload ${configType}`, { error: error.message }, false);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            testHealthCheck();
+            refreshWorkflows();
+
+            // Auto-refresh system status every 30 seconds
+            setInterval(() => {
+                testHealthCheck();
+                refreshWorkflows();
+            }, 30000);
+        });
+    </script>
+</body>
+
+</html>
